@@ -15,9 +15,9 @@ export default function App() {
   useEffect(() => {
     Promise.all([
       fetch('/api/settings').then(res => res.json()),
-      fetch('/api/shortcuts').then(res => res.json()),
+      /* fetch('/api/shortcuts') removed */
       fetch('/api/backgrounds').then(res => res.json())
-    ]).then(([settings, shortcutsData, bgData]) => {
+    ]).then(([settings, bgData]) => {
       if (settings) {
         if (settings.layout_size) setLayoutSize(settings.layout_size);
         if (settings.active_background) setActiveBackground(settings.active_background);
@@ -37,14 +37,14 @@ export default function App() {
           }
         } catch (e) {}
       }
-      if (bgData) setBackgrounds(bgData);
+      if (bgData && Array.isArray(bgData)) setBackgrounds(bgData);
       if (false) {
         // Build hierarchy if needed, assuming the DB returns flat or hierarchical. 
         // For simplicity, assuming backend stores flat and we just use the raw array if we stringified it.
         // Oh wait, backend shortcuts are flat. But localStorage shortcuts had nested children.
       }
       setDataLoaded(true);
-    });
+    }).catch(console.error);
   }, []);
 
   const gridContainerRef = useRef<HTMLDivElement>(null);
@@ -68,7 +68,7 @@ export default function App() {
         });
       };
       const updated = updateDeep(prev);
-      fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) });
+      fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
       return updated;
     });
     
@@ -226,7 +226,18 @@ export default function App() {
     localStorage.setItem('activeBackground', activeBackground);
     localStorage.setItem('tintColor', tintColor);
     localStorage.setItem('tintOpacity', String(tintOpacity));
-  }, [activeBackground, tintColor, tintOpacity]);
+    if (dataLoaded) {
+      fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          active_background: activeBackground,
+          tint_color: tintColor,
+          tint_opacity: tintOpacity
+        })
+      }).catch(console.error);
+    }
+  }, [activeBackground, tintColor, tintOpacity, dataLoaded]);
 
   const handleUploadBg = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -334,7 +345,7 @@ export default function App() {
               });
             };
             const updated = removeDeep(prev);
-            fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) });
+            fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
             
             // Trigger a resize event to ensure layout recalculations (instead of full reload)
             setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
@@ -354,7 +365,14 @@ export default function App() {
   // Update layout size in local storage
   useEffect(() => {
     localStorage.setItem('layoutSize', layoutSize);
-  }, [layoutSize]);
+    if (dataLoaded) {
+      fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ layout_size: layoutSize })
+      }).catch(console.error);
+    }
+  }, [layoutSize, dataLoaded]);
 
   const isInitializing = useRef(false);
   const allowSave = useRef(false);
@@ -587,7 +605,7 @@ export default function App() {
       };
 
       const updated = items.map(mapItem).filter(Boolean) as ShortcutItem[];
-      fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) });
+      fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
       return updated;
     });
   };
@@ -754,7 +772,7 @@ export default function App() {
 
     setShortcuts(prev => {
       const updated = [...prev, newItem];
-      fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) });
+      fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
       return updated;
     });
 
@@ -780,7 +798,7 @@ export default function App() {
     
     setShortcuts(prev => {
       const updated = [...prev, newItem];
-      fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) });
+      fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
       return updated;
     });
 
