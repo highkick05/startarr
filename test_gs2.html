@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/gridstack.js/10.0.1/gridstack.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gridstack.js/10.0.1/gridstack-all.js"></script>
+</head>
+<body>
+  <div class="grid-stack"></div>
+  <script>
+    var grid = GridStack.init({ column: 12 });
+    grid.addWidget({x: 5, y: 2, w: 2, h: 2, content: '<div>Test</div>'});
+    console.log(grid.save());
+  </script>
+</body>
+</html>
