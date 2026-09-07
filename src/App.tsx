@@ -522,7 +522,8 @@ export default function App() {
     const extractNodes = (grid: any): any[] => {
       if (!grid || !grid.engine || !grid.engine.nodes) return [];
       return grid.engine.nodes.map((node: any) => {
-        const id = node.id || node.el?.getAttribute('gs-id');
+        const rawId = node.id || node.el?.getAttribute("gs-id");
+        const id = rawId ? String(rawId) : undefined;
         const res: any = { id, x: node.x, y: node.y, w: node.w, h: node.h };
         if (node.subGrid) {
           res.children = extractNodes(node.subGrid);
@@ -557,7 +558,8 @@ export default function App() {
 
       // Recursive map to preserve children
       const mapItem = (item: any): ShortcutItem | null => {
-        const id = item.id || item.content?.match(/gs-id="([^"]+)"/)?.[1] || item.el?.getAttribute('gs-id');
+        const rawId = item.id || item.content?.match(/gs-id="([^"]+)"/)?.[1] || item.el?.getAttribute('gs-id');
+        const id = rawId ? String(rawId) : null;
         const existing = id ? safeFind(id) : null;
         if (!existing) return null;
 
