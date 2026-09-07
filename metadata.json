@@ -1,5 +1,5 @@
 {
-  "name": "startarr",
+  "name": "starterr",
   "description": "A drag-and-drop customizable homepage for app shortcuts.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
