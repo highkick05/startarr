@@ -390,6 +390,7 @@ export default function App() {
     }, gridContainerRef.current);
 
     // Initial load silently
+    gridInstance.current.removeAll();
     shortcuts.forEach(item => addWidgetToGrid(item));
 
     if (maxCols !== currentCols.current) {
@@ -518,6 +519,8 @@ export default function App() {
   }, [layoutSize, dataLoaded]); // Re-init grid when layoutSize changes or data finishes loading
 
   const saveGridState = () => {
+    console.log("saveGridState called");
+
     if (!gridInstance.current || isInitializing.current || !allowSave.current) return;
     const extractNodes = (grid: any): any[] => {
       if (!grid || !grid.engine || !grid.engine.nodes) return [];
@@ -532,6 +535,10 @@ export default function App() {
       });
     };
     const items = extractNodes(gridInstance.current);
+    console.log("EXTRACTED:", JSON.stringify(items, null, 2));
+    const mapped = items.map(mapItem).filter(Boolean);
+    console.log("MAPPED:", JSON.stringify(mapped, null, 2));
+
 
     
     setShortcuts(prev => {
@@ -689,16 +696,19 @@ export default function App() {
             if ((subGrid as any).updateMinSize) {
               (subGrid as any).updateMinSize();
             }
+            saveGridState();
           });
           subGrid.on('added', () => {
             if ((subGrid as any).updateMinSize) {
               (subGrid as any).updateMinSize();
             }
+            saveGridState();
           });
           subGrid.on('removed', () => {
             if ((subGrid as any).updateMinSize) {
               (subGrid as any).updateMinSize();
             }
+            saveGridState();
           });
           
           (subGrid as any)._autoColumn = true;
