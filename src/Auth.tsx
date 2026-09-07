@@ -87,7 +87,7 @@ const AuthScreen = () => {
     <div className="min-h-screen bg-black flex items-center justify-center font-sans text-neutral-100 p-4">
       <div className="w-full max-w-sm bg-neutral-900/50 backdrop-blur-xl border border-neutral-800 rounded-2xl p-6 shadow-2xl">
         <div className="flex items-center space-x-2 mb-8 justify-center">
-          <span className="font-semibold text-xl tracking-tight">startarr</span>
+          <span className="font-semibold text-xl tracking-tight">starterr</span>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

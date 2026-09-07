@@ -838,7 +838,7 @@ export default function App() {
       <header className="absolute top-0 left-0 w-full z-30 py-2.5 px-4 sm:px-6 pointer-events-none flex justify-between bg-black/30 backdrop-blur-md border-b border-white/10">
         <div className="w-full mx-auto flex items-center justify-between">
           <div className="flex items-center pointer-events-auto">
-            <span className="font-semibold text-lg tracking-tight">startarr</span>
+            <span className="font-semibold text-lg tracking-tight">starterr</span>
           </div>
           <div className="flex items-center space-x-3 pointer-events-auto text-sm font-medium text-neutral-200">
             <span>{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -996,7 +996,7 @@ export default function App() {
         <div className="p-6 border-b border-neutral-800 flex justify-between items-center bg-neutral-900/50 backdrop-blur sticky top-0 z-10 shrink-0">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <Settings size={20} className="text-neutral-400" />
-            startarr Settings
+            starterr Settings
           </h2>
           <button onClick={() => setIsSettingsOpen(false)} className="text-neutral-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-neutral-800">
              <X size={24} />
