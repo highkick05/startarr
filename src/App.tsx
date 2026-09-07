@@ -390,7 +390,7 @@ export default function App() {
     }, gridContainerRef.current);
 
     // Initial load silently
-    console.log('INIT SHORTCUTS:', shortcuts); shortcuts.forEach(item => addWidgetToGrid(item));
+    shortcuts.forEach(item => addWidgetToGrid(item));
 
     if (maxCols !== currentCols.current) {
       gridInstance.current.column(currentCols.current, 'move');
@@ -430,7 +430,7 @@ export default function App() {
       saveGridState();
     };
     
-    gridInstance.current.on('change', (e, items) => { console.log('CHANGE FIRED', items); handleGridChange(e, items); });
+    gridInstance.current.on('change', (e, items) => { handleGridChange(e, items); });
     gridInstance.current.on('added', handleGridChange);
     gridInstance.current.on('removed', handleGridChange);
 
