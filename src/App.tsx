@@ -519,7 +519,19 @@ export default function App() {
 
   const saveGridState = () => {
     if (!gridInstance.current || isInitializing.current || !allowSave.current) return;
-    const items = gridInstance.current.save() as any[]; console.log('SAVE GRID ITEMS:', items);
+    const extractNodes = (grid: any): any[] => {
+      if (!grid || !grid.engine || !grid.engine.nodes) return [];
+      return grid.engine.nodes.map((node: any) => {
+        const id = node.id || node.el?.getAttribute('gs-id');
+        const res: any = { id, x: node.x, y: node.y, w: node.w, h: node.h };
+        if (node.subGrid) {
+          res.children = extractNodes(node.subGrid);
+        }
+        return res;
+      });
+    };
+    const items = extractNodes(gridInstance.current);
+
     
     setShortcuts(prev => {
       // Deep find helper

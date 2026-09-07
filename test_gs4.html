@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/gridstack.js/13.2.0/gridstack.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gridstack.js/13.2.0/gridstack-all.js"></script>
+</head>
+<body>
+  <div class="grid-stack"></div>
+  <script>
+    var grid = GridStack.init({ column: 12 });
+    var wrapper = document.createElement('div');
+    wrapper.innerHTML = '<div class="grid-stack-item-content">Hello</div>';
+    document.querySelector('.grid-stack').appendChild(wrapper);
+    var el = grid.makeWidget(wrapper, {x: 1, y: 1, id: 'test1'});
+    
+    // Add subgrid
+    var subGridEl = document.createElement('div');
+    subGridEl.className = 'grid-stack';
+    wrapper.querySelector('.grid-stack-item-content').appendChild(subGridEl);
+    GridStack.addGrid(subGridEl, {column: 4});
+    
+    var saved = grid.save();
+    console.log(JSON.stringify(saved, null, 2));
+  </script>
+</body>
+</html>
