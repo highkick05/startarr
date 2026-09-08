@@ -13,7 +13,8 @@ const app = express();
 const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "super_secret_jwt_key_12345";
 
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '250mb' }));
+app.use(express.urlencoded({ limit: '250mb', extended: true }));
 app.use(cookieParser());
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -28,7 +29,7 @@ const storage = multer.diskStorage({
     cb(null, `${uuidv4()}${ext}`);
   },
 });
-const upload = multer({ storage });
+const upload = multer({ storage, limits: { fileSize: 250 * 1024 * 1024 } });
 
 app.use("/uploads", express.static(UPLOADS_DIR));
 
@@ -102,11 +103,13 @@ app.get("/api/settings", requireAuth, async (req: any, res) => {
 });
 
 app.put("/api/settings", requireAuth, async (req: any, res) => {
+  console.log("PUT RECEIVED BODY:", req.body);
   const { active_background, tint_color, tint_opacity, layout_size, shortcuts_json } = req.body;
   const db = await getDb();
   
   // Update fields conditionally if they exist in req.body
   const updates: string[] = [];
+  console.log('PUT /api/settings shortcuts_json length:', shortcuts_json ? shortcuts_json.length : 'none');
   const values: any[] = [];
   
   if (active_background !== undefined) { updates.push("active_background = ?"); values.push(active_background); }
