@@ -847,7 +847,8 @@ export default function App() {
         <div className="absolute inset-0 z-0 pointer-events-none">
           {activeBackground.match(/\.(mp4|webm|ogg)$/i) || backgrounds.find(b => b.url === activeBackground)?.type === 'video' ? (
             <video 
-              key={activeBackground} 
+              key={activeBackground}
+              src={activeBackground}
               autoPlay 
               loop 
               muted 
@@ -855,6 +856,8 @@ export default function App() {
               className="w-full h-full object-cover"
               ref={(el) => {
                 if (el) {
+                  // Ensure we explicitly reload if the src changed without a full unmount
+                  el.load();
                   // Catch autoplay interruptions gracefully to prevent global promise rejections
                   const playPromise = el.play();
                   if (playPromise !== undefined) {
@@ -862,9 +865,7 @@ export default function App() {
                   }
                 }
               }}
-            >
-              <source src={activeBackground} />
-            </video>
+            />
           ) : (
             <div className="w-full h-full bg-cover bg-center" style={{ backgroundImage: `url(${activeBackground})` }} />
           )}
