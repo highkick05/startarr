@@ -613,7 +613,7 @@ export default function App() {
   const getFaviconUrl = (url: string) => {
     try {
       const domain = new URL(url).hostname;
-      return `https://logo.clearbit.com/${domain}`;
+      return `https://unavatar.io/${domain}?fallback=false`;
     } catch {
       return '';
     }
