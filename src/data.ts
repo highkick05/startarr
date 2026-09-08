@@ -6,6 +6,38 @@ export interface ShortcutItem {
 
 export const popularApps: ShortcutItem[] = [
   {
+    "title": "Google AI Studio",
+    "url": "https://aistudio.google.com"
+  },
+  {
+    "title": "Midjourney",
+    "url": "https://midjourney.com"
+  },
+  {
+    "title": "OpenAI",
+    "url": "https://openai.com"
+  },
+  {
+    "title": "Anthropic",
+    "url": "https://anthropic.com"
+  },
+  {
+    "title": "Mistral AI",
+    "url": "https://mistral.ai"
+  },
+  {
+    "title": "Replicate",
+    "url": "https://replicate.com"
+  },
+  {
+    "title": "Civitai",
+    "url": "https://civitai.com"
+  },
+  {
+    "title": "Poe",
+    "url": "https://poe.com"
+  },
+  {
     "title": "ChatGPT",
     "url": "https://chatgpt.com"
   },
