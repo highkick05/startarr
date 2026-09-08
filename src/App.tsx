@@ -92,9 +92,10 @@ export default function App() {
           const domain = (() => { try { return new URL(item.url).hostname; } catch { return ''; } })();
           const fallbackIcon = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.title || 'Unknown')}&background=262626&color=fff&size=128`;
           const googleIcon = domain ? `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128` : fallbackIcon;
+      const primaryIcon = domain ? `https://icon.horse/icon/${domain}` : googleIcon;
           
           if (updates.iconUrl !== undefined || updates.url !== undefined || updates.title !== undefined) {
-             imgEl.src = item.iconUrl || googleIcon;
+             imgEl.src = item.iconUrl || primaryIcon;
              imgEl.setAttribute('onerror', `if(this.dataset.fallback === '1') { this.onerror=null; this.src='${fallbackIcon}'; } else { this.dataset.fallback='1'; this.src='${googleIcon}'; }`);
              imgEl.dataset.fallback = '0';
           }
@@ -613,7 +614,7 @@ export default function App() {
   const getFaviconUrl = (url: string) => {
     try {
       const domain = new URL(url).hostname;
-      return `https://logo.uplead.com/${domain}`;
+      return `https://icon.horse/icon/${domain}`;
     } catch {
       return '';
     }
@@ -652,9 +653,10 @@ export default function App() {
       `;
     } else {
       const domain = (() => { try { return new URL(item.url).hostname; } catch { return ''; } })();
-      const iconUrl = item.iconUrl || getFaviconUrl(item.url);
       const fallbackIcon = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.title || 'Unknown')}&background=262626&color=fff&size=128`;
       const googleIcon = domain ? `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128` : fallbackIcon;
+      const primaryIcon = domain ? `https://icon.horse/icon/${domain}` : googleIcon;
+      const iconUrl = item.iconUrl || primaryIcon;
 
       htmlContent = `
         <div class="grid-stack-item-content relative group flex flex-col items-center justify-center cursor-grab active:cursor-grabbing transition-transform duration-300 hover:scale-105 hover:bg-neutral-800/30 rounded-2xl"
@@ -662,7 +664,7 @@ export default function App() {
 
           <div class="pointer-events-none w-full h-full flex flex-col items-center justify-between ${paddingClass}">
             <div class="flex-1 w-full min-h-0 flex items-center justify-center mt-1">
-              <img src="${iconUrl}" onerror="if(this.dataset.fallback === '1') { this.onerror=null; this.src='${fallbackIcon}'; } else { this.dataset.fallback='1'; this.src='${googleIcon}'; }" alt="${item.title}" draggable="false" style="width: 100%; height: 100%; aspect-ratio: 1/1;" class="object-cover drop-shadow-md hover:drop-shadow-xl transition-transform duration-300 rounded-2xl shadow-sm" />
+              <img src="${iconUrl}" onerror="if(this.dataset.fallback === '1') { this.onerror=null; this.src='${fallbackIcon}'; } else { this.dataset.fallback='1'; this.src='${googleIcon}'; }" alt="${item.title}" draggable="false" style="width: 100%; height: 100%; aspect-ratio: 1/1;" class="object-contain drop-shadow-md hover:drop-shadow-xl transition-transform duration-300 rounded-xl" />
             </div>
             <span style="${titleStyle}" class="font-medium text-neutral-300 truncate w-full text-center px-0.5 ${textMarginClass} tracking-wide drop-shadow-sm opacity-90 group-hover:opacity-100 transition-opacity">
               ${item.title}
@@ -975,7 +977,7 @@ export default function App() {
                       >
                         <div className="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center flex-shrink-0 overflow-hidden">
                            <img 
-                             src={getFaviconUrl(app.url)} 
+                             src={app.iconUrl || getFaviconUrl(app.url)} 
                              onError={(e) => {
                                const target = e.currentTarget;
                                try {
