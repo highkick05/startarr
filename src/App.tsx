@@ -613,7 +613,7 @@ export default function App() {
   const getFaviconUrl = (url: string) => {
     try {
       const domain = new URL(url).hostname;
-      return `https://unavatar.io/${domain}?fallback=false`;
+      return `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`;
     } catch {
       return '';
     }
@@ -624,6 +624,11 @@ export default function App() {
     if (!grid) return;
     
     let htmlContent = '';
+    const isSmall = layoutSize === 'small';
+    const paddingClass = isSmall ? 'p-1' : 'p-2';
+    const textMarginClass = isSmall ? 'mt-0' : 'mt-1';
+    const titleStyle = isSmall ? 'font-size: 0.6rem; line-height: 0.8rem;' : 'font-size: clamp(0.65rem, 2vw, 0.75rem);';
+
     if (item.type === 'category') {
       htmlContent = `
         <div class="grid-stack-item-content relative group flex flex-col justify-end pb-2 border-b-2 border-neutral-800/60 hover:border-neutral-600 transition-colors cursor-grab active:cursor-grabbing">
@@ -655,11 +660,11 @@ export default function App() {
         <div class="grid-stack-item-content relative group flex flex-col items-center justify-center cursor-grab active:cursor-grabbing transition-transform duration-300 hover:scale-105 hover:bg-neutral-800/30 rounded-2xl"
              onclick="if(!this.parentElement.classList.contains('ui-draggable-dragging') && !this.parentElement.classList.contains('grid-stack-item-dragging')) window.open('${item.url}', '_blank')">
 
-          <div class="pointer-events-none w-full h-full flex flex-col items-center justify-center pt-2">
-            <div class="flex-1 w-full min-h-0 flex items-center justify-center mb-1">
-              <img src="${iconUrl}" onerror="if(this.dataset.fallback === '1') { this.onerror=null; this.src='${fallbackIcon}'; } else { this.dataset.fallback='1'; this.src='${googleIcon}'; }" alt="${item.title}" draggable="false" style="max-width: 100%; max-height: 100%; aspect-ratio: 1/1;" class="object-contain drop-shadow-md hover:drop-shadow-xl transition-all rounded-2xl" />
+          <div class="pointer-events-none w-full h-full flex flex-col items-center justify-between ${paddingClass}">
+            <div class="flex-1 w-full min-h-0 flex items-center justify-center mt-1">
+              <img src="${iconUrl}" onerror="if(this.dataset.fallback === '1') { this.onerror=null; this.src='${fallbackIcon}'; } else { this.dataset.fallback='1'; this.src='${googleIcon}'; }" alt="${item.title}" draggable="false" style="width: 100%; height: 100%; aspect-ratio: 1/1;" class="object-contain drop-shadow-md hover:drop-shadow-xl transition-transform duration-300 rounded-xl" />
             </div>
-            <span class="text-xs font-medium text-neutral-300 truncate w-full text-center px-1 pb-2 tracking-wide drop-shadow-sm opacity-90 group-hover:opacity-100 transition-opacity">
+            <span style="${titleStyle}" class="font-medium text-neutral-300 truncate w-full text-center px-0.5 ${textMarginClass} tracking-wide drop-shadow-sm opacity-90 group-hover:opacity-100 transition-opacity">
               ${item.title}
             </span>
           </div>
