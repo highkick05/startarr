@@ -613,7 +613,7 @@ export default function App() {
   const getFaviconUrl = (url: string) => {
     try {
       const domain = new URL(url).hostname;
-      return `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`;
+      return `https://logo.uplead.com/${domain}`;
     } catch {
       return '';
     }
