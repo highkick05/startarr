@@ -846,7 +846,23 @@ export default function App() {
       {activeBackground && activeBackground !== 'none' && (
         <div className="absolute inset-0 z-0 pointer-events-none">
           {activeBackground.match(/\.(mp4|webm|ogg)$/i) || backgrounds.find(b => b.url === activeBackground)?.type === 'video' ? (
-            <video key={activeBackground} autoPlay loop muted playsInline className="w-full h-full object-cover">
+            <video 
+              key={activeBackground} 
+              autoPlay 
+              loop 
+              muted 
+              playsInline 
+              className="w-full h-full object-cover"
+              ref={(el) => {
+                if (el) {
+                  // Catch autoplay interruptions gracefully to prevent global promise rejections
+                  const playPromise = el.play();
+                  if (playPromise !== undefined) {
+                    playPromise.catch(() => { /* silent catch */ });
+                  }
+                }
+              }}
+            >
               <source src={activeBackground} />
             </video>
           ) : (

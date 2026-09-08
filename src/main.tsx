@@ -6,7 +6,13 @@ window.addEventListener('error', (e) => {
   console.error('GLOBAL ERROR:', e.error?.message, e.error?.stack);
 });
 window.addEventListener('unhandledrejection', (e) => {
-  console.error('GLOBAL PROMISE REJECTION:', e.reason?.message, e.reason?.stack);
+  // Suppress harmless DOM exceptions from video autoplay and focus
+  if (e.reason && (e.reason.name === 'NotAllowedError' || e.reason.name === 'AbortError' || (typeof e.reason === 'string' && e.reason.includes('play()')))) {
+    e.preventDefault();
+    return;
+  }
+  // Print full reason to ensure we don't get undefined
+  console.error('GLOBAL PROMISE REJECTION:', e.reason);
 });
 ;
 import './index.css';
