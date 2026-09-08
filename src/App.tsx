@@ -662,7 +662,7 @@ export default function App() {
 
           <div class="pointer-events-none w-full h-full flex flex-col items-center justify-between ${paddingClass}">
             <div class="flex-1 w-full min-h-0 flex items-center justify-center mt-1">
-              <img src="${iconUrl}" onerror="if(this.dataset.fallback === '1') { this.onerror=null; this.src='${fallbackIcon}'; } else { this.dataset.fallback='1'; this.src='${googleIcon}'; }" alt="${item.title}" draggable="false" style="width: 100%; height: 100%; aspect-ratio: 1/1;" class="object-contain drop-shadow-md hover:drop-shadow-xl transition-transform duration-300 rounded-xl" />
+              <img src="${iconUrl}" onerror="if(this.dataset.fallback === '1') { this.onerror=null; this.src='${fallbackIcon}'; } else { this.dataset.fallback='1'; this.src='${googleIcon}'; }" alt="${item.title}" draggable="false" style="width: 100%; height: 100%; aspect-ratio: 1/1;" class="object-cover drop-shadow-md hover:drop-shadow-xl transition-transform duration-300 rounded-2xl shadow-sm" />
             </div>
             <span style="${titleStyle}" class="font-medium text-neutral-300 truncate w-full text-center px-0.5 ${textMarginClass} tracking-wide drop-shadow-sm opacity-90 group-hover:opacity-100 transition-opacity">
               ${item.title}
