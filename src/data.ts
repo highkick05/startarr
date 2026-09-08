@@ -6,6 +6,446 @@ export interface ShortcutItem {
 
 export const popularApps: ShortcutItem[] = [
   {
+    "title": "Dialogflow",
+    "url": "https://dialogflow.cloud.google.com"
+  },
+  {
+    "title": "TensorFlow",
+    "url": "https://tensorflow.org"
+  },
+  {
+    "title": "Vertex AI",
+    "url": "https://cloud.google.com/vertex-ai"
+  },
+  {
+    "title": "Google Cloud Console",
+    "url": "https://console.cloud.google.com"
+  },
+  {
+    "title": "Google Analytics",
+    "url": "https://analytics.google.com"
+  },
+  {
+    "title": "Google Search Console",
+    "url": "https://search.google.com"
+  },
+  {
+    "title": "Google Tag Manager",
+    "url": "https://tagmanager.google.com"
+  },
+  {
+    "title": "Google Keep",
+    "url": "https://keep.google.com"
+  },
+  {
+    "title": "Google Tasks",
+    "url": "https://tasks.google.com"
+  },
+  {
+    "title": "Google Contacts",
+    "url": "https://contacts.google.com"
+  },
+  {
+    "title": "Google Voice",
+    "url": "https://voice.google.com"
+  },
+  {
+    "title": "Google Fi",
+    "url": "https://fi.google.com"
+  },
+  {
+    "title": "Google Trends",
+    "url": "https://trends.google.com"
+  },
+  {
+    "title": "Google Scholar",
+    "url": "https://scholar.google.com"
+  },
+  {
+    "title": "Google Flights",
+    "url": "https://google.com/flights"
+  },
+  {
+    "title": "Google Podcasts",
+    "url": "https://podcasts.google.com"
+  },
+  {
+    "title": "Google Earth",
+    "url": "https://earth.google.com"
+  },
+  {
+    "title": "Google Arts & Culture",
+    "url": "https://artsandculture.google.com"
+  },
+  {
+    "title": "Google Translate",
+    "url": "https://translate.google.com"
+  },
+  {
+    "title": "Google News",
+    "url": "https://news.google.com"
+  },
+  {
+    "title": "Google Chat",
+    "url": "https://chat.google.com"
+  },
+  {
+    "title": "Google Classroom",
+    "url": "https://classroom.google.com"
+  },
+  {
+    "title": "Google One",
+    "url": "https://one.google.com"
+  },
+  {
+    "title": "Google Domains",
+    "url": "https://domains.google.com"
+  },
+  {
+    "title": "Google Ads",
+    "url": "https://ads.google.com"
+  },
+  {
+    "title": "AdSense",
+    "url": "https://google.com/adsense"
+  },
+  {
+    "title": "Blogger",
+    "url": "https://blogger.com"
+  },
+  {
+    "title": "Looker",
+    "url": "https://looker.com"
+  },
+  {
+    "title": "Android Studio",
+    "url": "https://developer.android.com/studio"
+  },
+  {
+    "title": "Google Play Console",
+    "url": "https://play.google.com/console"
+  },
+  {
+    "title": "Flutter",
+    "url": "https://flutter.dev"
+  },
+  {
+    "title": "Dart",
+    "url": "https://dart.dev"
+  },
+  {
+    "title": "Keras",
+    "url": "https://keras.io"
+  },
+  {
+    "title": "JAX",
+    "url": "https://jax.readthedocs.io"
+  },
+  {
+    "title": "Colab",
+    "url": "https://colab.research.google.com"
+  },
+  {
+    "title": "Flowise",
+    "url": "https://flowiseai.com"
+  },
+  {
+    "title": "LangSmith",
+    "url": "https://smith.langchain.com"
+  },
+  {
+    "title": "Roboflow",
+    "url": "https://roboflow.com"
+  },
+  {
+    "title": "Qdrant",
+    "url": "https://qdrant.tech"
+  },
+  {
+    "title": "Milvus",
+    "url": "https://milvus.io"
+  },
+  {
+    "title": "DataStax",
+    "url": "https://datastax.com"
+  },
+  {
+    "title": "Grok",
+    "url": "https://grok.x.ai"
+  },
+  {
+    "title": "Copilot",
+    "url": "https://copilot.microsoft.com"
+  },
+  {
+    "title": "Codeium",
+    "url": "https://codeium.com"
+  },
+  {
+    "title": "Tabnine",
+    "url": "https://tabnine.com"
+  },
+  {
+    "title": "MutableAI",
+    "url": "https://mutable.ai"
+  },
+  {
+    "title": "Kite",
+    "url": "https://kite.com"
+  },
+  {
+    "title": "Datadog",
+    "url": "https://datadoghq.com"
+  },
+  {
+    "title": "Splunk",
+    "url": "https://splunk.com"
+  },
+  {
+    "title": "New Relic",
+    "url": "https://newrelic.com"
+  },
+  {
+    "title": "Sentry",
+    "url": "https://sentry.io"
+  },
+  {
+    "title": "Postman",
+    "url": "https://postman.com"
+  },
+  {
+    "title": "Insomnia",
+    "url": "https://insomnia.rest"
+  },
+  {
+    "title": "Swagger",
+    "url": "https://swagger.io"
+  },
+  {
+    "title": "Okta",
+    "url": "https://okta.com"
+  },
+  {
+    "title": "Ping Identity",
+    "url": "https://pingidentity.com"
+  },
+  {
+    "title": "Akamai",
+    "url": "https://akamai.com"
+  },
+  {
+    "title": "Linode",
+    "url": "https://linode.com"
+  },
+  {
+    "title": "Vultr",
+    "url": "https://vultr.com"
+  },
+  {
+    "title": "Hetzner",
+    "url": "https://hetzner.com"
+  },
+  {
+    "title": "OVHcloud",
+    "url": "https://ovhcloud.com"
+  },
+  {
+    "title": "GoDaddy",
+    "url": "https://godaddy.com"
+  },
+  {
+    "title": "Namecheap",
+    "url": "https://namecheap.com"
+  },
+  {
+    "title": "GitKraken",
+    "url": "https://gitkraken.com"
+  },
+  {
+    "title": "SourceTree",
+    "url": "https://sourcetreeapp.com"
+  },
+  {
+    "title": "Tower",
+    "url": "https://git-tower.com"
+  },
+  {
+    "title": "Sublime Text",
+    "url": "https://sublimetext.com"
+  },
+  {
+    "title": "WebStorm",
+    "url": "https://jetbrains.com/webstorm"
+  },
+  {
+    "title": "IntelliJ IDEA",
+    "url": "https://jetbrains.com/idea"
+  },
+  {
+    "title": "PyCharm",
+    "url": "https://jetbrains.com/pycharm"
+  },
+  {
+    "title": "PhpStorm",
+    "url": "https://jetbrains.com/phpstorm"
+  },
+  {
+    "title": "RubyMine",
+    "url": "https://jetbrains.com/ruby"
+  },
+  {
+    "title": "Rider",
+    "url": "https://jetbrains.com/rider"
+  },
+  {
+    "title": "CLion",
+    "url": "https://jetbrains.com/clion"
+  },
+  {
+    "title": "DataGrip",
+    "url": "https://jetbrains.com/datagrip"
+  },
+  {
+    "title": "GoLand",
+    "url": "https://jetbrains.com/go"
+  },
+  {
+    "title": "Vim",
+    "url": "https://vim.org"
+  },
+  {
+    "title": "Neovim",
+    "url": "https://neovim.io"
+  },
+  {
+    "title": "Monday.com",
+    "url": "https://monday.com"
+  },
+  {
+    "title": "ClickUp",
+    "url": "https://clickup.com"
+  },
+  {
+    "title": "Smartsheet",
+    "url": "https://smartsheet.com"
+  },
+  {
+    "title": "Wrike",
+    "url": "https://wrike.com"
+  },
+  {
+    "title": "Basecamp",
+    "url": "https://basecamp.com"
+  },
+  {
+    "title": "Notepad++",
+    "url": "https://notepad-plus-plus.org"
+  },
+  {
+    "title": "Evernote",
+    "url": "https://evernote.com"
+  },
+  {
+    "title": "Bear",
+    "url": "https://bear.app"
+  },
+  {
+    "title": "Ulysses",
+    "url": "https://ulysses.app"
+  },
+  {
+    "title": "Drafts",
+    "url": "https://getdrafts.com"
+  },
+  {
+    "title": "Brave",
+    "url": "https://brave.com"
+  },
+  {
+    "title": "Firefox",
+    "url": "https://mozilla.org/firefox"
+  },
+  {
+    "title": "Chrome",
+    "url": "https://google.com/chrome"
+  },
+  {
+    "title": "Edge",
+    "url": "https://microsoft.com/edge"
+  },
+  {
+    "title": "Opera",
+    "url": "https://opera.com"
+  },
+  {
+    "title": "Vivaldi",
+    "url": "https://vivaldi.com"
+  },
+  {
+    "title": "Zen Browser",
+    "url": "https://zen-browser.app"
+  },
+  {
+    "title": "Ecosia",
+    "url": "https://ecosia.org"
+  },
+  {
+    "title": "Searx",
+    "url": "https://searx.space"
+  },
+  {
+    "title": "Kagi",
+    "url": "https://kagi.com"
+  },
+  {
+    "title": "Sketch",
+    "url": "https://sketch.com"
+  },
+  {
+    "title": "InVision",
+    "url": "https://invisionapp.com"
+  },
+  {
+    "title": "Zeplin",
+    "url": "https://zeplin.io"
+  },
+  {
+    "title": "Abstract",
+    "url": "https://abstract.com"
+  },
+  {
+    "title": "Wix",
+    "url": "https://wix.com"
+  },
+  {
+    "title": "Squarespace",
+    "url": "https://squarespace.com"
+  },
+  {
+    "title": "WordPress",
+    "url": "https://wordpress.com"
+  },
+  {
+    "title": "WooCommerce",
+    "url": "https://woocommerce.com"
+  },
+  {
+    "title": "Magento",
+    "url": "https://magento.com"
+  },
+  {
+    "title": "BigCommerce",
+    "url": "https://bigcommerce.com"
+  },
+  {
+    "title": "Joomla",
+    "url": "https://joomla.org"
+  },
+  {
+    "title": "Drupal",
+    "url": "https://drupal.org"
+  },
+  {
     "title": "ElevenLabs",
     "url": "https://elevenlabs.io"
   },
