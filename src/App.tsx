@@ -91,7 +91,7 @@ export default function App() {
        if (imgEl) {
           const domain = (() => { try { return new URL(item.url).hostname; } catch { return ''; } })();
           const fallbackIcon = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.title || 'Unknown')}&background=262626&color=fff&size=128`;
-          const googleIcon = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128` : fallbackIcon;
+          const googleIcon = domain ? `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128` : fallbackIcon;
           
           if (updates.iconUrl !== undefined || updates.url !== undefined || updates.title !== undefined) {
              imgEl.src = item.iconUrl || googleIcon;
@@ -613,7 +613,7 @@ export default function App() {
   const getFaviconUrl = (url: string) => {
     try {
       const domain = new URL(url).hostname;
-      return `https://logo.clearbit.com/${domain}`;
+      return `https://icon.horse/icon/${domain}`; // high-res icon
     } catch {
       return '';
     }
@@ -649,7 +649,7 @@ export default function App() {
       const domain = (() => { try { return new URL(item.url).hostname; } catch { return ''; } })();
       const iconUrl = item.iconUrl || getFaviconUrl(item.url);
       const fallbackIcon = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.title || 'Unknown')}&background=262626&color=fff&size=128`;
-      const googleIcon = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128` : fallbackIcon;
+      const googleIcon = domain ? `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128` : fallbackIcon;
 
       htmlContent = `
         <div class="grid-stack-item-content relative group flex flex-col items-center justify-center cursor-grab active:cursor-grabbing transition-transform duration-300 hover:scale-105 hover:bg-neutral-800/30 rounded-2xl"
@@ -980,7 +980,7 @@ export default function App() {
                                    target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(app.title || 'U')}&background=262626&color=fff&size=64`;
                                  } else {
                                    target.dataset.fallback = '1';
-                                   target.src = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+                                   target.src = `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`;
                                  }
                                } catch {
                                  target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(app.title || 'U')}&background=262626&color=fff&size=64`;
@@ -1200,7 +1200,7 @@ export default function App() {
                             target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(contextMenu.shortcut?.title || 'U')}&background=262626&color=fff&size=64`;
                           } else {
                             target.dataset.fallback = '1';
-                            target.src = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+                            target.src = `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`;
                           }
                         } catch {
                           target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(contextMenu.shortcut?.title || 'U')}&background=262626&color=fff&size=64`;
