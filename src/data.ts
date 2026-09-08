@@ -6,6 +6,442 @@ export interface ShortcutItem {
 
 export const popularApps: ShortcutItem[] = [
   {
+    "title": "ElevenLabs",
+    "url": "https://elevenlabs.io"
+  },
+  {
+    "title": "Runway",
+    "url": "https://runwayml.com"
+  },
+  {
+    "title": "Leonardo AI",
+    "url": "https://leonardo.ai"
+  },
+  {
+    "title": "Pika",
+    "url": "https://pika.art"
+  },
+  {
+    "title": "Luma AI",
+    "url": "https://lumalabs.ai"
+  },
+  {
+    "title": "Suno",
+    "url": "https://suno.com"
+  },
+  {
+    "title": "Udio",
+    "url": "https://udio.com"
+  },
+  {
+    "title": "v0 by Vercel",
+    "url": "https://v0.dev"
+  },
+  {
+    "title": "Replit",
+    "url": "https://replit.com"
+  },
+  {
+    "title": "Cursor",
+    "url": "https://cursor.com"
+  },
+  {
+    "title": "Raycast",
+    "url": "https://raycast.com"
+  },
+  {
+    "title": "Arc Browser",
+    "url": "https://arc.net"
+  },
+  {
+    "title": "LangChain",
+    "url": "https://langchain.com"
+  },
+  {
+    "title": "LlamaIndex",
+    "url": "https://llamaindex.ai"
+  },
+  {
+    "title": "Pinecone",
+    "url": "https://pinecone.io"
+  },
+  {
+    "title": "Weaviate",
+    "url": "https://weaviate.io"
+  },
+  {
+    "title": "Chroma",
+    "url": "https://trychroma.com"
+  },
+  {
+    "title": "Weights & Biases",
+    "url": "https://wandb.ai"
+  },
+  {
+    "title": "Databricks",
+    "url": "https://databricks.com"
+  },
+  {
+    "title": "Snowflake",
+    "url": "https://snowflake.com"
+  },
+  {
+    "title": "Scale AI",
+    "url": "https://scale.com"
+  },
+  {
+    "title": "Glean",
+    "url": "https://glean.com"
+  },
+  {
+    "title": "Jasper",
+    "url": "https://jasper.ai"
+  },
+  {
+    "title": "Copy.ai",
+    "url": "https://copy.ai"
+  },
+  {
+    "title": "Synthesia",
+    "url": "https://synthesia.io"
+  },
+  {
+    "title": "Descript",
+    "url": "https://descript.com"
+  },
+  {
+    "title": "Framer",
+    "url": "https://framer.com"
+  },
+  {
+    "title": "Webflow",
+    "url": "https://webflow.com"
+  },
+  {
+    "title": "Spline",
+    "url": "https://spline.design"
+  },
+  {
+    "title": "Rive",
+    "url": "https://rive.app"
+  },
+  {
+    "title": "Veed",
+    "url": "https://veed.io"
+  },
+  {
+    "title": "CapCut",
+    "url": "https://capcut.com"
+  },
+  {
+    "title": "Character.ai",
+    "url": "https://character.ai"
+  },
+  {
+    "title": "Phind",
+    "url": "https://phind.com"
+  },
+  {
+    "title": "You.com",
+    "url": "https://you.com"
+  },
+  {
+    "title": "Andi",
+    "url": "https://andisearch.com"
+  },
+  {
+    "title": "Together AI",
+    "url": "https://together.ai"
+  },
+  {
+    "title": "Groq",
+    "url": "https://groq.com"
+  },
+  {
+    "title": "Anyscale",
+    "url": "https://anyscale.com"
+  },
+  {
+    "title": "Cohere",
+    "url": "https://cohere.com"
+  },
+  {
+    "title": "AI21",
+    "url": "https://ai21.com"
+  },
+  {
+    "title": "Inflection",
+    "url": "https://inflection.ai"
+  },
+  {
+    "title": "Writer",
+    "url": "https://writer.com"
+  },
+  {
+    "title": "Harvey",
+    "url": "https://harvey.ai"
+  },
+  {
+    "title": "Tome",
+    "url": "https://tome.app"
+  },
+  {
+    "title": "Gamma",
+    "url": "https://gamma.app"
+  },
+  {
+    "title": "Beautiful.ai",
+    "url": "https://beautiful.ai"
+  },
+  {
+    "title": "Pitch",
+    "url": "https://pitch.com"
+  },
+  {
+    "title": "Miro",
+    "url": "https://miro.com"
+  },
+  {
+    "title": "Mural",
+    "url": "https://mural.co"
+  },
+  {
+    "title": "Whimsical",
+    "url": "https://whimsical.com"
+  },
+  {
+    "title": "Excalidraw",
+    "url": "https://excalidraw.com"
+  },
+  {
+    "title": "tldraw",
+    "url": "https://tldraw.com"
+  },
+  {
+    "title": "Obsidian",
+    "url": "https://obsidian.md"
+  },
+  {
+    "title": "Roam Research",
+    "url": "https://roamresearch.com"
+  },
+  {
+    "title": "Logseq",
+    "url": "https://logseq.com"
+  },
+  {
+    "title": "Mem",
+    "url": "https://mem.ai"
+  },
+  {
+    "title": "Craft",
+    "url": "https://craft.do"
+  },
+  {
+    "title": "Cron",
+    "url": "https://cron.com"
+  },
+  {
+    "title": "Amie",
+    "url": "https://amie.so"
+  },
+  {
+    "title": "Akiflow",
+    "url": "https://akiflow.com"
+  },
+  {
+    "title": "Sunsama",
+    "url": "https://sunsama.com"
+  },
+  {
+    "title": "TickTick",
+    "url": "https://ticktick.com"
+  },
+  {
+    "title": "Todoist",
+    "url": "https://todoist.com"
+  },
+  {
+    "title": "Things",
+    "url": "https://culturedcode.com/things"
+  },
+  {
+    "title": "Superhuman",
+    "url": "https://superhuman.com"
+  },
+  {
+    "title": "Hey",
+    "url": "https://hey.com"
+  },
+  {
+    "title": "Shortwave",
+    "url": "https://shortwave.com"
+  },
+  {
+    "title": "Spark",
+    "url": "https://sparkmailapp.com"
+  },
+  {
+    "title": "Typeform",
+    "url": "https://typeform.com"
+  },
+  {
+    "title": "Airtable",
+    "url": "https://airtable.com"
+  },
+  {
+    "title": "Coda",
+    "url": "https://coda.io"
+  },
+  {
+    "title": "Zapier",
+    "url": "https://zapier.com"
+  },
+  {
+    "title": "Make",
+    "url": "https://make.com"
+  },
+  {
+    "title": "n8n",
+    "url": "https://n8n.io"
+  },
+  {
+    "title": "Gumroad",
+    "url": "https://gumroad.com"
+  },
+  {
+    "title": "Lemon Squeezy",
+    "url": "https://lemonsqueezy.com"
+  },
+  {
+    "title": "Paddle",
+    "url": "https://paddle.com"
+  },
+  {
+    "title": "Auth0",
+    "url": "https://auth0.com"
+  },
+  {
+    "title": "Clerk",
+    "url": "https://clerk.com"
+  },
+  {
+    "title": "WorkOS",
+    "url": "https://workos.com"
+  },
+  {
+    "title": "Appwrite",
+    "url": "https://appwrite.io"
+  },
+  {
+    "title": "PlanetScale",
+    "url": "https://planetscale.com"
+  },
+  {
+    "title": "Neon",
+    "url": "https://neon.tech"
+  },
+  {
+    "title": "Railway",
+    "url": "https://railway.app"
+  },
+  {
+    "title": "Render",
+    "url": "https://render.com"
+  },
+  {
+    "title": "Fly.io",
+    "url": "https://fly.io"
+  },
+  {
+    "title": "CodePen",
+    "url": "https://codepen.io"
+  },
+  {
+    "title": "CodeSandbox",
+    "url": "https://codesandbox.io"
+  },
+  {
+    "title": "StackBlitz",
+    "url": "https://stackblitz.com"
+  },
+  {
+    "title": "Dribbble",
+    "url": "https://dribbble.com"
+  },
+  {
+    "title": "Behance",
+    "url": "https://behance.net"
+  },
+  {
+    "title": "Product Hunt",
+    "url": "https://producthunt.com"
+  },
+  {
+    "title": "Indie Hackers",
+    "url": "https://indiehackers.com"
+  },
+  {
+    "title": "Newscombinator",
+    "url": "https://news.ycombinator.com"
+  },
+  {
+    "title": "Dev.to",
+    "url": "https://dev.to"
+  },
+  {
+    "title": "Hashnode",
+    "url": "https://hashnode.com"
+  },
+  {
+    "title": "Ghost",
+    "url": "https://ghost.org"
+  },
+  {
+    "title": "Wistia",
+    "url": "https://wistia.com"
+  },
+  {
+    "title": "Loom",
+    "url": "https://loom.com"
+  },
+  {
+    "title": "Google Meet",
+    "url": "https://meet.google.com"
+  },
+  {
+    "title": "Microsoft Teams",
+    "url": "https://teams.microsoft.com"
+  },
+  {
+    "title": "Guilded",
+    "url": "https://guilded.gg"
+  },
+  {
+    "title": "Kick",
+    "url": "https://kick.com"
+  },
+  {
+    "title": "Strava",
+    "url": "https://strava.com"
+  },
+  {
+    "title": "AllTrails",
+    "url": "https://alltrails.com"
+  },
+  {
+    "title": "MyFitnessPal",
+    "url": "https://myfitnesspal.com"
+  },
+  {
+    "title": "Headspace",
+    "url": "https://headspace.com"
+  },
+  {
+    "title": "Calm",
+    "url": "https://calm.com"
+  },
+  {
     "title": "Google AI Studio",
     "url": "https://aistudio.google.com"
   },
