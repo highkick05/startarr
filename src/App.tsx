@@ -14,9 +14,8 @@ export default function App() {
   
   useEffect(() => {
     Promise.all([
-      fetch('/api/settings').then(res => res.json()),
-      /* fetch('/api/shortcuts') removed */
-      fetch('/api/backgrounds').then(res => res.json())
+      fetch('/api/settings').then(res => res.ok ? res.json() : null).catch(() => null),
+      fetch('/api/backgrounds').then(res => res.ok ? res.json() : []).catch(() => [])
     ]).then(([settings, bgData]) => {
       if (settings) {
         if (settings.layout_size) setLayoutSize(settings.layout_size);
