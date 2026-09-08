@@ -613,7 +613,7 @@ export default function App() {
   const getFaviconUrl = (url: string) => {
     try {
       const domain = new URL(url).hostname;
-      return `https://icon.horse/icon/${domain}`; // high-res icon
+      return `https://logo.clearbit.com/${domain}`;
     } catch {
       return '';
     }
