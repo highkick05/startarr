@@ -96,7 +96,8 @@ export default function App() {
           
           if (updates.iconUrl !== undefined || updates.url !== undefined || updates.title !== undefined) {
              imgEl.src = item.iconUrl || primaryIcon;
-             imgEl.setAttribute('onerror', `if(this.dataset.fallback === '1') { this.onerror=null; this.src='${fallbackIcon}'; } else { this.dataset.fallback='1'; this.src='${googleIcon}'; }`);
+             imgEl.setAttribute('onload', `if(this.naturalWidth < 64 && !this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.naturalWidth < 64 && this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; }`);
+             imgEl.setAttribute('onerror', `if(!this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; } else { this.onerror=null; }`);
              imgEl.dataset.fallback = '0';
           }
        }
@@ -664,7 +665,7 @@ export default function App() {
 
           <div class="pointer-events-none w-full h-full flex flex-col items-center justify-between ${paddingClass}">
             <div class="flex-1 w-full min-h-0 flex items-center justify-center mt-1">
-              <img src="${iconUrl}" onerror="if(this.dataset.fallback === '1') { this.onerror=null; this.src='${fallbackIcon}'; } else { this.dataset.fallback='1'; this.src='${googleIcon}'; }" alt="${item.title}" draggable="false" style="width: 100%; height: 100%; aspect-ratio: 1/1;" class="object-contain drop-shadow-md hover:drop-shadow-xl transition-transform duration-300 rounded-xl" />
+              <img src="${iconUrl}"  onload="if(this.naturalWidth < 64 && !this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.naturalWidth < 64 && this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; }" onerror="if(!this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; } else { this.onerror=null; }" alt="${item.title}" draggable="false" style="width: 100%; height: 100%; aspect-ratio: 1/1;" class="object-contain drop-shadow-md hover:drop-shadow-xl transition-transform duration-300 rounded-xl" />
             </div>
             <span style="${titleStyle}" class="font-medium text-neutral-300 truncate w-full text-center px-0.5 ${textMarginClass} tracking-wide drop-shadow-sm opacity-90 group-hover:opacity-100 transition-opacity">
               ${item.title}
