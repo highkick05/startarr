@@ -205,6 +205,7 @@ export default function App() {
 
   const [backgrounds, setBackgrounds] = useState<any[]>([]);
   const [activeBackground, setActiveBackground] = useState('https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=2560&q=80');
+  console.log("Current activeBackground:", activeBackground);
   const [tintColor, setTintColor] = useState('#000000');
   const [tintOpacity, setTintOpacity] = useState(40);
   const [uploadingBg, setUploadingBg] = useState(false);
@@ -844,7 +845,7 @@ export default function App() {
     <div className="min-h-screen bg-neutral-950 font-sans text-neutral-100 selection:bg-blue-500/30 overflow-x-hidden relative">
       {/* Background Media */}
       {activeBackground && activeBackground !== 'none' && (
-        <div className="absolute inset-0 z-0 pointer-events-none">
+        <div key={activeBackground} className="absolute inset-0 z-0 pointer-events-none">
           {activeBackground.match(/\.(mp4|webm|ogg)$/i) || backgrounds.find(b => b.url === activeBackground)?.type === 'video' ? (
             <video 
               key={activeBackground}
@@ -855,19 +856,18 @@ export default function App() {
               playsInline 
               className="w-full h-full object-cover"
               ref={(el) => {
-                if (el) {
-                  // Ensure we explicitly reload if the src changed without a full unmount
+                if (el && el.getAttribute('data-current-src') !== activeBackground) {
+                  el.setAttribute('data-current-src', activeBackground);
                   el.load();
-                  // Catch autoplay interruptions gracefully to prevent global promise rejections
                   const playPromise = el.play();
                   if (playPromise !== undefined) {
-                    playPromise.catch(() => { /* silent catch */ });
+                    playPromise.catch(() => {});
                   }
                 }
               }}
             />
           ) : (
-            <div className="w-full h-full bg-cover bg-center" style={{ backgroundImage: `url(${activeBackground})` }} />
+            <div className="w-full h-full bg-cover bg-center" style={{ backgroundImage: `url("${activeBackground}")` }} />
           )}
         </div>
       )}
