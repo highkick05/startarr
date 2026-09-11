@@ -147,49 +147,7 @@ app.post("/api/scrape-metadata", requireAuth, async (req: any, res) => {
     }
     
     // Improve App Name Heuristics for Homelab / Generic titles
-    const genericTitles = ['login', 'home', 'dashboard', 'welcome', 'index', 'sign in'];
-    const lowerTitle = title.toLowerCase();
-    if (!title || genericTitles.includes(lowerTitle) || title.includes('://')) {
-        const hostname = new URL(fetchUrl).hostname.toLowerCase();
-        const appMap: Record<string, string> = {
-            'adguard': 'AdGuard Home', 'adgaurd': 'AdGuard Home', 'pihole': 'Pi-hole', 'pi-hole': 'Pi-hole',
-            'proxmox': 'Proxmox', 'truenas': 'TrueNAS', 'portainer': 'Portainer', 'jellyfin': 'Jellyfin',
-            'sonarr': 'Sonarr', 'radarr': 'Radarr', 'lidarr': 'Lidarr', 'readarr': 'Readarr', 
-            'prowlarr': 'Prowlarr', 'pfsense': 'pfSense', 'opnsense': 'OPNsense', 
-            'homeassistant': 'Home Assistant', 'home-assistant': 'Home Assistant',
-            'nextcloud': 'Nextcloud', 'authelia': 'Authelia', 'authentik': 'Authentik',
-            'nginx': 'Nginx Proxy Manager', 'npm': 'Nginx Proxy Manager',
-            'grafana': 'Grafana', 'plex': 'Plex', 'unraid': 'Unraid', 'syncthing': 'Syncthing',
-            'kibana': 'Kibana', 'prometheus': 'Prometheus', 'traefik': 'Traefik',
-            'vaultwarden': 'Vaultwarden', 'bitwarden': 'Bitwarden', 'calibre': 'Calibre',
-            'qbittorrent': 'qBittorrent', 'transmission': 'Transmission', 'deluge': 'Deluge',
-            'nzbget': 'NZBGet', 'sabnzbd': 'SABnzbd', 'jackett': 'Jackett', 'ombi': 'Ombi',
-            'overseerr': 'Overseerr', 'tautulli': 'Tautulli', 'uptime': 'Uptime Kuma',
-            'kuma': 'Uptime Kuma', 'paperless': 'Paperless-ngx', 'photoprism': 'PhotoPrism',
-            'immich': 'Immich', 'ghost': 'Ghost', 'wordpress': 'WordPress', 'gitea': 'Gitea',
-            'gitlab': 'GitLab', 'jenkins': 'Jenkins', 'drone': 'Drone', 'portainer': 'Portainer',
-            'rancher': 'Rancher', 'truenas': 'TrueNAS', 'freenas': 'FreeNAS', 'synology': 'Synology'
-        };
-        
-        let foundBetterTitle = false;
-        for (const [key, name] of Object.entries(appMap)) {
-            if (hostname.includes(key)) {
-                title = name;
-                foundBetterTitle = true;
-                break;
-            }
-        }
-        
-        if (!foundBetterTitle) {
-           // Fallback to capitalizing the first part of the domain
-           const parts = hostname.split('.');
-           if (parts.length > 0 && parts[0] !== 'www') {
-               title = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
-           } else if (parts.length > 1) {
-               title = parts[1].charAt(0).toUpperCase() + parts[1].slice(1);
-           }
-        }
-    }
+    title = getBetterTitle(title, fetchUrl);
 
     const icons = new Set();
     const linkRegex = /<link[^>]+rel=["']?(?:shortcut icon|icon|apple-touch-icon)["']?[^>]*href=["']([^"']+)["']/gi;
@@ -221,7 +179,7 @@ app.post("/api/scrape-metadata", requireAuth, async (req: any, res) => {
     try {
       const u = new URL(url.startsWith('http') ? url : 'https://' + url);
       res.json({
-        title: u.hostname,
+        title: getBetterTitle(u.hostname, u.href),
         icons: [
           `https://icon.horse/icon/${u.hostname}`,
           `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${u.origin}&size=128`
