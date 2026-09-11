@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { GridStack } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
-import { Plus, X, Link2, LayoutGrid, Search, Globe, Settings, Trash2, Image as ImageIcon, Video as VideoIcon, Upload, Trash, LogOut, User } from 'lucide-react';
+import { Plus, X, Link2, LayoutGrid, Search, Globe, Settings, Trash2, Image as ImageIcon, Video as VideoIcon, Upload, Trash, LogOut, User } Link, Loader2, from 'lucide-react';
 import { ShortcutItem } from './types';
 import { AuthContext } from './Auth.tsx';
 import { popularApps } from './data';
@@ -192,6 +192,13 @@ export default function App() {
   const gridKey = useRef(0); // Used to force-remount grid when layout size changes
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [customAppModal, setCustomAppModal] = useState<{ visible: boolean, url: string }>({ visible: false, url: '' });
+  const [iconSelectorModal, setIconSelectorModal] = useState<{ visible: boolean, shortcut: ShortcutItem | null }>({ visible: false, shortcut: null });
+  const [scrapedMetadata, setScrapedMetadata] = useState<{ title: string, icons: string[] } | null>(null);
+  const [isScraping, setIsScraping] = useState(false);
+  const [selectedCustomIcon, setSelectedCustomIcon] = useState('');
+  const [customTitle, setCustomTitle] = useState('');
+
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -976,6 +983,25 @@ export default function App() {
             {/* Suggestions Dropdown */}
             {isInputFocused && searchQuery.trim().length > 0 && (
               <div className="absolute bottom-full left-0 w-full mb-1 bg-neutral-900 border border-neutral-800 rounded-t-3xl rounded-b-lg shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 z-50">
+                
+                {/^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(\/.*)?$/i.test(searchQuery) && (
+                  <div className="p-2 border-b border-neutral-800">
+                    <button
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setCustomAppModal({ visible: true, url: searchQuery });
+                        setSearchQuery('');
+                        setIsInputFocused(false);
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg flex items-center gap-3 hover:bg-neutral-800 transition-colors bg-blue-500/10 text-blue-400"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+                        <Link2 size={16} />
+                      </div>
+                      <span className="font-medium text-sm">Create custom shortcut for '{searchQuery}'</span>
+                    </button>
+                  </div>
+                )}
                 {filteredApps.length > 0 ? (
                   <ul className="py-2">
                     {filteredApps.map((app, idx) => (
@@ -1292,6 +1318,16 @@ export default function App() {
             >
               <Trash2 size={12} className="mr-1.5" /> Delete
             </button>
+            <button
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors flex items-center mt-1 border-t border-neutral-700 pt-1.5"
+              onClick={() => {
+                const shortcut = contextMenu.shortcut!;
+                setIconSelectorModal({ visible: true, shortcut });
+                setContextMenu({ visible: false, x: 0, y: 0, shortcut: null });
+              }}
+            >
+              <ImageIcon size={12} className="mr-1.5" /> Change Icon
+            </button>
           </div>
         </div>
       )}
@@ -1301,6 +1337,210 @@ export default function App() {
           className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity"
           onClick={() => setIsSettingsOpen(false)}
         />
+      )}
+
+
+      {/* Modals for Custom URL and Icon Selection */}
+      {customAppModal.visible && (
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-4 border-b border-neutral-800 flex justify-between items-center bg-neutral-950">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Link2 size={18} className="text-blue-500" /> Add Custom Shortcut
+              </h2>
+              <button onClick={() => { setCustomAppModal({ visible: false, url: '' }); setScrapedMetadata(null); setCustomTitle(''); }} className="text-neutral-400 hover:text-white p-1 rounded-lg hover:bg-neutral-800">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto">
+              {!scrapedMetadata && !isScraping ? (
+                <div className="flex flex-col items-center justify-center py-8">
+                   <button 
+                     className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors"
+                     onClick={async () => {
+                       setIsScraping(true);
+                       try {
+                         const res = await fetch('/api/scrape-metadata', {
+                           method: 'POST',
+                           headers: { 'Content-Type': 'application/json' },
+                           body: JSON.stringify({ url: customAppModal.url })
+                         });
+                         const data = await res.json();
+                         setScrapedMetadata(data);
+                         setCustomTitle(data.title || customAppModal.url);
+                         setSelectedCustomIcon(data.icons?.[0] || '');
+                       } catch (e) {
+                         console.error(e);
+                       } finally {
+                         setIsScraping(false);
+                       }
+                     }}
+                   >
+                     Fetch Site Details
+                   </button>
+                </div>
+              ) : isScraping ? (
+                <div className="flex flex-col items-center justify-center py-12 text-neutral-400">
+                  <div className="animate-spin mb-4"><Loader2 size={32} /></div>
+                  <p>Discovering site icons...</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">Shortcut Title</label>
+                    <input 
+                      type="text" 
+                      value={customTitle} 
+                      onChange={e => setCustomTitle(e.target.value)}
+                      className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">Select Icon</label>
+                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 max-h-48 overflow-y-auto p-1">
+                      {scrapedMetadata?.icons.map((icon, i) => (
+                        <button 
+                          key={i} 
+                          onClick={() => setSelectedCustomIcon(icon)}
+                          className={`aspect-square rounded-xl border-2 flex items-center justify-center p-2 transition-all ${selectedCustomIcon === icon ? 'border-blue-500 bg-blue-500/10' : 'border-transparent bg-neutral-950 hover:border-neutral-700'}`}
+                        >
+                          <img src={icon} className="max-w-full max-h-full object-contain rounded-lg" onError={(e: any) => e.target.style.display='none'} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button 
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-colors"
+                    onClick={() => {
+                      const newId = 'shortcut_' + Date.now();
+                      const newItem = {
+                        id: newId,
+                        type: 'app' as const,
+                        title: customTitle,
+                        url: customAppModal.url.startsWith('http') ? customAppModal.url : 'https://' + customAppModal.url,
+                        iconUrl: selectedCustomIcon,
+                        w: 1, h: 1
+                      };
+                      setShortcuts(prev => {
+                        const updated = [...prev, newItem];
+                        fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+                        return updated;
+                      });
+                      addWidgetToGrid(newItem);
+                      setCustomAppModal({ visible: false, url: '' });
+                      setScrapedMetadata(null);
+                      setCustomTitle('');
+                    }}
+                  >
+                    Add Shortcut
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {iconSelectorModal.visible && iconSelectorModal.shortcut && (
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-4 border-b border-neutral-800 flex justify-between items-center bg-neutral-950">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <ImageIcon size={18} className="text-purple-500" /> Change Icon for {iconSelectorModal.shortcut.title}
+              </h2>
+              <button onClick={() => { setIconSelectorModal({ visible: false, shortcut: null }); setScrapedMetadata(null); }} className="text-neutral-400 hover:text-white p-1 rounded-lg hover:bg-neutral-800">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto">
+              {!scrapedMetadata && !isScraping ? (
+                <div className="flex flex-col items-center justify-center py-8">
+                   <button 
+                     className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium transition-colors"
+                     onClick={async () => {
+                       setIsScraping(true);
+                       try {
+                         const res = await fetch('/api/scrape-metadata', {
+                           method: 'POST',
+                           headers: { 'Content-Type': 'application/json' },
+                           body: JSON.stringify({ url: iconSelectorModal.shortcut!.url })
+                         });
+                         const data = await res.json();
+                         setScrapedMetadata(data);
+                         setSelectedCustomIcon(iconSelectorModal.shortcut!.iconUrl || data.icons?.[0] || '');
+                       } catch (e) {
+                         console.error(e);
+                       } finally {
+                         setIsScraping(false);
+                       }
+                     }}
+                   >
+                     Scan Site for Icons
+                   </button>
+                </div>
+              ) : isScraping ? (
+                <div className="flex flex-col items-center justify-center py-12 text-neutral-400">
+                  <div className="animate-spin mb-4"><Loader2 size={32} /></div>
+                  <p>Discovering site icons...</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">Select Icon</label>
+                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 max-h-48 overflow-y-auto p-1">
+                      {scrapedMetadata?.icons.map((icon, i) => (
+                        <button 
+                          key={i} 
+                          onClick={() => setSelectedCustomIcon(icon)}
+                          className={`aspect-square rounded-xl border-2 flex items-center justify-center p-2 transition-all ${selectedCustomIcon === icon ? 'border-purple-500 bg-purple-500/10' : 'border-transparent bg-neutral-950 hover:border-neutral-700'}`}
+                        >
+                          <img src={icon} className="max-w-full max-h-full object-contain rounded-lg" onError={(e: any) => e.target.style.display='none'} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button 
+                    className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold transition-colors"
+                    onClick={() => {
+                      // Update shortcut
+                      const idToUpdate = iconSelectorModal.shortcut!.id;
+                      setShortcuts(prev => {
+                        // Deep clone and update
+                        const updateRecursive = (items: ShortcutItem[]): ShortcutItem[] => {
+                          return items.map(item => {
+                            if (item.id === idToUpdate) return { ...item, iconUrl: selectedCustomIcon };
+                            if (item.children) return { ...item, children: updateRecursive(item.children) };
+                            return item;
+                          });
+                        };
+                        const updated = updateRecursive(prev);
+                        fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+                        return updated;
+                      });
+                      
+                      // Force DOM update
+                      if (gridContainerRef.current) {
+                        const el = gridContainerRef.current.querySelector(`[gs-id="${idToUpdate}"]`);
+                        if (el) {
+                          const img = el.querySelector('img');
+                          if (img) {
+                            img.src = selectedCustomIcon;
+                            img.dataset.fallback = '';
+                          }
+                        }
+                      }
+
+                      setIconSelectorModal({ visible: false, shortcut: null });
+                      setScrapedMetadata(null);
+                    }}
+                  >
+                    Save Icon
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

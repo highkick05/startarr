@@ -126,6 +126,68 @@ app.put("/api/settings", requireAuth, async (req: any, res) => {
   res.json({ success: true });
 });
 
+app.post("/api/scrape-metadata", requireAuth, async (req: any, res) => {
+  const { url } = req.body;
+  try {
+    let fetchUrl = url;
+    if (!fetchUrl.startsWith('http')) fetchUrl = 'https://' + fetchUrl;
+    
+    const response = await fetch(fetchUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; starterr/1.0)' },
+      signal: AbortSignal.timeout(5000)
+    });
+    const html = await response.text();
+    
+    let title = '';
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    if (titleMatch) title = titleMatch[1].trim();
+    if (!title) {
+       const ogTitleMatch = html.match(/<meta[^>]*property=["']?og:title["']?[^>]*content=["']([^"']+)["']/i);
+       if (ogTitleMatch) title = ogTitleMatch[1].trim();
+    }
+
+    const icons = new Set();
+    const linkRegex = /<link[^>]+rel=["']?(?:shortcut icon|icon|apple-touch-icon)["']?[^>]*href=["']([^"']+)["']/gi;
+    let match;
+    while ((match = linkRegex.exec(html)) !== null) {
+      icons.add(match[1]);
+    }
+    
+    const ogImageRegex = /<meta[^>]*property=["']?og:image["']?[^>]*content=["']([^"']+)["']/gi;
+    while ((match = ogImageRegex.exec(html)) !== null) {
+      icons.add(match[1]);
+    }
+
+    const baseUrl = new URL(response.url);
+    const resolvedIcons = Array.from(icons).map(icon => {
+      try {
+        return new URL(icon, baseUrl).href;
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
+
+    resolvedIcons.push(new URL('/favicon.ico', baseUrl).href);
+    resolvedIcons.push(`https://icon.horse/icon/${baseUrl.hostname}`);
+    resolvedIcons.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${baseUrl.origin}&size=128`);
+
+    res.json({ title: title || baseUrl.hostname, icons: [...new Set(resolvedIcons)] });
+  } catch (err) {
+    try {
+      const u = new URL(url.startsWith('http') ? url : 'https://' + url);
+      res.json({
+        title: u.hostname,
+        icons: [
+          `https://icon.horse/icon/${u.hostname}`,
+          `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${u.origin}&size=128`
+        ]
+      });
+    } catch {
+       res.status(400).json({ error: "Invalid URL" });
+    }
+  }
+});
+
 // Backgrounds
 app.get("/api/backgrounds", requireAuth, async (req: any, res) => {
   const db = await getDb();
