@@ -1,3 +1,4 @@
+import { GoogleGenAI } from '@google/genai';
 import express from "express";
 import path from "path";
 import fs from "fs";
@@ -11,6 +12,7 @@ import cookieParser from "cookie-parser";
 
 const app = express();
 const PORT = 3000;
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const JWT_SECRET = process.env.JWT_SECRET || "super_secret_jwt_key_12345";
 
 app.use(express.json({ limit: '250mb' }));
@@ -147,7 +149,7 @@ app.post("/api/scrape-metadata", requireAuth, async (req: any, res) => {
     }
     
     // Improve App Name Heuristics for Homelab / Generic titles
-    title = getBetterTitle(title, fetchUrl);
+    title = await getBetterTitle(title, fetchUrl);
 
     const icons = new Set();
     const linkRegex = /<link[^>]+rel=["']?(?:shortcut icon|icon|apple-touch-icon)["']?[^>]*href=["']([^"']+)["']/gi;
@@ -179,7 +181,7 @@ app.post("/api/scrape-metadata", requireAuth, async (req: any, res) => {
     try {
       const u = new URL(url.startsWith('http') ? url : 'https://' + url);
       res.json({
-        title: getBetterTitle(u.hostname, u.href),
+        title: await getBetterTitle(u.hostname, u.href),
         icons: [
           `https://icon.horse/icon/${u.hostname}`,
           `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${u.origin}&size=128`
