@@ -155,11 +155,11 @@ app.post("/api/scrape-metadata", requireAuth, async (req: any, res) => {
     
     const ogImageRegex = /<meta[^>]*property=["']?og:image["']?[^>]*content=["']([^"']+)["']/gi;
     while ((match = ogImageRegex.exec(html)) !== null) {
-      icons.add(match[1]);
+      pushIcon(match[1]);
     }
 
     const baseUrl = new URL(response.url);
-    const resolvedIcons = Array.from(icons).map(icon => {
+    const resolvedIcons = icons.map(icon => {
       try {
         return new URL(icon, baseUrl).href;
       } catch {
