@@ -248,7 +248,7 @@ app.post("/api/scrape-metadata", requireAuth, async (req: any, res) => {
     resolvedIcons.push(`https://icon.horse/icon/${baseUrl.hostname}`);
     resolvedIcons.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${baseUrl.origin}&size=128`);
 
-    res.json({ title: title || baseUrl.hostname, icons: [...new Set(resolvedIcons)] });
+    res.json({ title: getBetterTitle(title || '', baseUrl.href), icons: [...new Set(resolvedIcons)] });
   } catch (err) {
     try {
       const u = new URL(url.startsWith('http') ? url : 'https://' + url);
