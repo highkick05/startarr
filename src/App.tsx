@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { GridStack } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
-import { Plus, X, Link2, LayoutGrid, Search, Globe, Settings, Trash2, Image as ImageIcon, Video as VideoIcon, Upload, Trash, LogOut, User } Link, Loader2, from 'lucide-react';
+import { Plus, X, Link2, Loader2, LayoutGrid, Search, Globe, Settings, Trash2, Image as ImageIcon, Video as VideoIcon, Upload, Trash, LogOut, User } from 'lucide-react';
 import { ShortcutItem } from './types';
 import { AuthContext } from './Auth.tsx';
 import { popularApps } from './data';
