@@ -845,6 +845,7 @@ export default function App() {
 
         console.log('Fetching scrape metadata for', formattedUrl); fetch('/api/scrape-metadata', {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: formattedUrl })
         })
@@ -1027,9 +1028,10 @@ export default function App() {
                         setSearchQuery('');
 
                         console.log('Fetching scrape metadata for', formattedUrl); fetch('/api/scrape-metadata', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ url: formattedUrl })
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: formattedUrl })
                         })
                         .then(res => res.json())
                         .then(data => { console.log('Scraped data:', data);
@@ -1471,10 +1473,11 @@ export default function App() {
                      onClick={async () => {
                        setIsScraping(true);
                        try {
-                         const res = await console.log('Fetching scrape metadata for', formattedUrl); fetch('/api/scrape-metadata', {
-                           method: 'POST',
-                           headers: { 'Content-Type': 'application/json' },
-                           body: JSON.stringify({ url: iconSelectorModal.shortcut!.url })
+                         const res = await fetch('/api/scrape-metadata', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: iconSelectorModal.shortcut!.url })
                          });
                          const data = await res.json();
                          setScrapedMetadata(data);
