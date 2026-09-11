@@ -226,7 +226,7 @@ export default function App() {
         }
         return [];
       })
-      .then(data => {
+      .then(data => { console.log('Scraped data:', data);
         if (Array.isArray(data)) setBackgrounds(data);
       })
       .catch(() => {});
@@ -843,13 +843,13 @@ export default function App() {
         setIsAddingShortcut(true);
         setSearchQuery('');
 
-        fetch('/api/scrape-metadata', {
+        console.log('Fetching scrape metadata for', formattedUrl); fetch('/api/scrape-metadata', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: formattedUrl })
         })
         .then(res => res.json())
-        .then(data => {
+        .then(data => { console.log('Scraped data:', data);
           const newId = 'shortcut_' + Date.now();
           let chosenIcon = data.icons?.[0];
           const horseIcon = `https://icon.horse/icon/${new URL(formattedUrl).hostname}`;
@@ -874,8 +874,7 @@ export default function App() {
           });
           addWidgetToGrid(newItem);
         })
-        .catch(err => console.error("Failed to add custom shortcut", err))
-        .finally(() => setIsAddingShortcut(false));
+        .catch(err => console.error("Failed to add custom shortcut", err)).finally(() => setIsAddingShortcut(false));
       }
     } else if (e.key === 'Escape') {
       setIsInputFocused(false);
@@ -1027,13 +1026,13 @@ export default function App() {
                         setIsAddingShortcut(true);
                         setSearchQuery('');
 
-                        fetch('/api/scrape-metadata', {
+                        console.log('Fetching scrape metadata for', formattedUrl); fetch('/api/scrape-metadata', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ url: formattedUrl })
                         })
                         .then(res => res.json())
-                        .then(data => {
+                        .then(data => { console.log('Scraped data:', data);
                           const newId = 'shortcut_' + Date.now();
                           let chosenIcon = data.icons?.[0];
                           const horseIcon = `https://icon.horse/icon/${new URL(formattedUrl).hostname}`;
@@ -1472,7 +1471,7 @@ export default function App() {
                      onClick={async () => {
                        setIsScraping(true);
                        try {
-                         const res = await fetch('/api/scrape-metadata', {
+                         const res = await console.log('Fetching scrape metadata for', formattedUrl); fetch('/api/scrape-metadata', {
                            method: 'POST',
                            headers: { 'Content-Type': 'application/json' },
                            body: JSON.stringify({ url: iconSelectorModal.shortcut!.url })
