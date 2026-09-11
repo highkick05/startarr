@@ -200,7 +200,7 @@ function getBetterTitle(title: string, urlString: string) {
 }
 
 
-app.post("/api/scrape-metadata", requireAuth, async (req: any, res) => {
+app.post("/api/scrape-metadata", async (req: any, res) => {
   const { url } = req.body;
   try {
     let fetchUrl = url;
@@ -232,11 +232,11 @@ app.post("/api/scrape-metadata", requireAuth, async (req: any, res) => {
     
     const ogImageRegex = /<meta[^>]*property=["']?og:image["']?[^>]*content=["']([^"']+)["']/gi;
     while ((match = ogImageRegex.exec(html)) !== null) {
-      pushIcon(match[1]);
+      icons.add(match[1]);
     }
 
     const baseUrl = new URL(response.url);
-    const resolvedIcons = icons.map(icon => {
+    const resolvedIcons = Array.from(icons).map(icon => {
       try {
         return new URL(icon, baseUrl).href;
       } catch {

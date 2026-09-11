@@ -862,7 +862,7 @@ export default function App() {
           const newItem = {
             id: newId,
             type: 'app' as const,
-            title: data.title && data.title.trim() ? data.title.trim() : new URL(formattedUrl).hostname,
+            title: (data.title && data.title.trim() && data.title !== 'error') ? data.title.trim() : new URL(formattedUrl).hostname,
             url: formattedUrl,
             iconUrl: chosenIcon || horseIcon,
             w: 1, h: 1
@@ -1046,7 +1046,7 @@ export default function App() {
                           const newItem = {
                             id: newId,
                             type: 'app' as const,
-                            title: data.title && data.title.trim() ? data.title.trim() : new URL(formattedUrl).hostname,
+                            title: (data.title && data.title.trim() && data.title !== 'error') ? data.title.trim() : new URL(formattedUrl).hostname,
                             url: formattedUrl,
                             iconUrl: chosenIcon || horseIcon,
                             w: 1, h: 1
@@ -1481,6 +1481,10 @@ export default function App() {
                          });
                          const data = await res.json();
                          setScrapedMetadata(data);
+                         if (data.title && data.title.trim()) {
+                           setIconSelectorModal(p => p.shortcut ? {...p, shortcut: {...p.shortcut, title: data.title.trim()}} : p);
+                           setShortcuts(prev => prev.map(s => s.id === iconSelectorModal.shortcut!.id ? {...s, title: data.title.trim()} : s));
+                         }
                          setSelectedCustomIcon(iconSelectorModal.shortcut!.iconUrl || data.icons?.[0] || '');
                        } catch (e) {
                          console.error(e);
