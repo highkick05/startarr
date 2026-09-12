@@ -136,13 +136,13 @@ app.get("/api/settings", requireAuth, async (req: any, res) => {
 });
 
 app.put("/api/settings", requireAuth, async (req: any, res) => {
-  console.log("PUT RECEIVED BODY:", req.body);
+  
   const { active_background, tint_color, tint_opacity, ui_opacity, ui_blur, layout_size, shortcuts_json } = req.body;
   const db = await getDb();
   
   // Update fields conditionally if they exist in req.body
   const updates: string[] = [];
-  console.log('PUT /api/settings shortcuts_json length:', shortcuts_json ? shortcuts_json.length : 'none');
+  
   const values: any[] = [];
   
   if (active_background !== undefined) { updates.push("active_background = ?"); values.push(active_background); }
