@@ -755,7 +755,7 @@ export default function App() {
       noResize: item.type !== 'container',
     };
     if (item.type === 'container') {
-      opts.sizeToContent = true;
+      // opts.sizeToContent = true; // disabled because it conflicts with our manual updateMinSize calculation
     }
     
     if (item.x !== undefined) opts.x = item.x;
@@ -812,7 +812,7 @@ export default function App() {
             
             const node = el.gridstackNode;
             if (node && node.h !== requiredH) {
-               grid.update(el, { h: requiredH });
+               grid.update(el, { w: node.w, h: requiredH, minW: 1, minH: requiredH });
             }
           };
 
