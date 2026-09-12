@@ -799,7 +799,7 @@ export default function App() {
             if (!subGrid.engine) return;
             const nodes = subGrid.engine.nodes;
             
-            let requiredH = 10;
+            let requiredH = 12;
             if (nodes.length > 0) {
               let maxBottom = 0;
               nodes.forEach((n: any) => {
@@ -807,7 +807,7 @@ export default function App() {
                 const bottom = snappedY + (n.h || 1);
                 if (bottom > maxBottom) maxBottom = bottom;
               });
-              requiredH = maxBottom + 2;
+              requiredH = maxBottom + 4;
             }
             
             const node = el.gridstackNode;
@@ -879,7 +879,7 @@ export default function App() {
       title: title.trim(),
       url: '#',
       w: 1, // 1 app wide
-      h: 10, // 8 for 1 app + 2 for container title
+      h: 12, // 8 for 1 app + 4 for container title/padding
     };
     
     setShortcuts(prev => {
