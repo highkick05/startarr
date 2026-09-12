@@ -26,11 +26,14 @@ export default function App() {
       if (settings && settings.shortcuts_json) {
         try {
           const parsed = JSON.parse(settings.shortcuts_json);
-          if (parsed && parsed.length > 0) {
-            setShortcuts(parsed.map((p: any) => ({
+          if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+            setShortcuts(parsed.filter((p: any) => !!p).map((p: any) => ({
               ...p,
-              w: p.type === 'app' ? 1 : p.w,
-              h: p.type === 'app' ? 1 : p.h
+              w: p?.type === 'app' ? 1 : p?.w,
+              // Multiply h by 8 if it's the old 1x format. 
+              // We assume old apps have h:1. Old containers have h:2 or 3.
+              // New apps will have h:8.
+              h: (p.type === 'app' && p.h < 8) ? 8 : (p.type === 'category' && p.h < 4 ? 4 : (p.type === 'container' && p.h < 8 ? p.h * 8 : p.h))
             })));
             // Also need to re-render grid since API loaded!
           }
@@ -86,18 +89,31 @@ export default function App() {
        if (titleEl && updates.title !== undefined) {
          titleEl.textContent = updates.title || 'Unknown';
        }
+       const imgWrapperEl = el.querySelector('.flex-1 > div');
        const imgEl = el.querySelector('img');
-       if (imgEl) {
+       if (imgEl && imgWrapperEl) {
           const domain = (() => { try { return new URL(item.url).hostname; } catch { return ''; } })();
           const fallbackIcon = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.title || 'Unknown')}&background=262626&color=fff&size=128`;
           const googleIcon = domain ? `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128` : fallbackIcon;
-      const primaryIcon = domain ? `https://icon.horse/icon/${domain}` : googleIcon;
+          const primaryIcon = domain ? `https://icon.horse/icon/${domain}` : googleIcon;
           
           if (updates.iconUrl !== undefined || updates.url !== undefined || updates.title !== undefined) {
              imgEl.src = item.iconUrl || primaryIcon;
              imgEl.setAttribute('onload', `if(this.naturalWidth < 64 && !this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.naturalWidth < 64 && this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; }`);
              imgEl.setAttribute('onerror', `if(!this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; } else { this.onerror=null; }`);
              imgEl.dataset.fallback = '0';
+          }
+          if (updates.invertIcon !== undefined) {
+            imgEl.style.filter = item.invertIcon ? 'invert(1)' : 'none';
+          }
+          if (updates.iconBackground !== undefined) {
+            const wrapper = imgWrapperEl as HTMLElement;
+            wrapper.style.backgroundColor = item.iconBackground === 'white' ? 'white' : item.iconBackground === 'black' ? 'black' : 'transparent';
+            if (item.iconBackground === 'white' || item.iconBackground === 'black') {
+              wrapper.classList.add('p-2');
+            } else {
+              wrapper.classList.remove('p-2');
+            }
           }
        }
        
@@ -129,11 +145,11 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed && parsed.length > 0) {
-          return parsed.map((p: any) => ({
+        if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((p: any) => !!p).map((p: any) => ({
             ...p,
-            w: p.type === 'app' ? 1 : p.w,
-            h: p.type === 'app' ? 1 : p.h
+            w: p?.type === 'app' ? 1 : p?.w,
+            h: p?.type === 'app' ? 1 : p?.h
           }));
         }
       } catch (e) {
@@ -179,19 +195,21 @@ export default function App() {
   };
 
   const getCellHeight = (size = layoutSize) => {
-    if (typeof window === 'undefined') return 80;
+    if (typeof window === 'undefined') return 10;
     const w = window.innerWidth;
-    let padding = 32; // w-full mx-auto px-4 (16px * 2) = 32px
-    if (w >= 1024) padding = 64; // lg:px-8 (32px * 2) = 64px
-    else if (w >= 640) padding = 48; // sm:px-6 (24px * 2) = 48px
-    
-    return Math.max(40, Math.floor((w - padding) / getColumns(size)));
+    let padding = 32;
+    if (w >= 1024) padding = 64;
+    else if (w >= 640) padding = 48;
+    // We divide by 8 to create a fine-grained grid (10px height scale)
+    return Math.max(5, Math.floor(Math.floor((w - padding) / getColumns(size)) / 8));
   };
 
   const currentCols = useRef(getColumns(layoutSize));
   const gridKey = useRef(0); // Used to force-remount grid when layout size changes
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{title: string, url: string}[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [customAppModal, setCustomAppModal] = useState<{ visible: boolean, url: string }>({ visible: false, url: '' });
   const [iconSelectorModal, setIconSelectorModal] = useState<{ visible: boolean, shortcut: ShortcutItem | null }>({ visible: false, shortcut: null });
   const [scrapedMetadata, setScrapedMetadata] = useState<{ title: string, icons: string[] } | null>(null);
@@ -216,6 +234,8 @@ export default function App() {
   console.log("Current activeBackground:", activeBackground);
   const [tintColor, setTintColor] = useState('#000000');
   const [tintOpacity, setTintOpacity] = useState(40);
+  const [uiOpacity, setUiOpacity] = useState(100);
+  const [uiBlur, setUiBlur] = useState(16);
   const [uploadingBg, setUploadingBg] = useState(false);
 
   useEffect(() => {
@@ -236,6 +256,8 @@ export default function App() {
     localStorage.setItem('activeBackground', activeBackground);
     localStorage.setItem('tintColor', tintColor);
     localStorage.setItem('tintOpacity', String(tintOpacity));
+    localStorage.setItem('uiOpacity', String(uiOpacity));
+    localStorage.setItem('uiBlur', String(uiBlur));
     if (dataLoaded) {
       fetch('/api/settings', {
         method: 'PUT',
@@ -243,11 +265,13 @@ export default function App() {
         body: JSON.stringify({
           active_background: activeBackground,
           tint_color: tintColor,
-          tint_opacity: tintOpacity
+          tint_opacity: tintOpacity,
+          ui_opacity: uiOpacity,
+          ui_blur: uiBlur
         })
       }).catch(console.error);
     }
-  }, [activeBackground, tintColor, tintOpacity, dataLoaded]);
+  }, [activeBackground, tintColor, tintOpacity, uiOpacity, uiBlur, dataLoaded]);
 
   const handleUploadBg = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -299,6 +323,37 @@ export default function App() {
       .filter(app => app.title.toLowerCase().includes(searchQuery.toLowerCase()) || app.url.toLowerCase().includes(searchQuery.toLowerCase()))
       .slice(0, 8);
   }, [searchQuery]);
+
+  useEffect(() => {
+    if (!searchQuery.trim() || filteredApps.length > 0) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+    
+    const isUrl = /^https?:\/\//i.test(searchQuery) || /\.[a-z]{2,}$/i.test(searchQuery);
+    if (isUrl || searchQuery.trim().length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`);
+        const data = await res.json();
+        setSearchResults(data.results || []);
+      } catch (e) {
+        console.error(e);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery, filteredApps.length]);
+
 
   // Track mouse position to reveal bottom bar
   useEffect(() => {
@@ -398,15 +453,16 @@ export default function App() {
     
     const calculateMinRows = () => {
       if (typeof window === 'undefined') return 1;
-      const availableHeight = window.innerHeight - 240; // Approx header and footer space
-      const ch = getCellHeight(layoutSize) + 2;
+      const availableHeight = window.innerHeight - 240;
+      const ch = getCellHeight(layoutSize);
       return Math.max(1, Math.floor(availableHeight / ch));
     };
 
     gridInstance.current = GridStack.init({
+      disableOneColumnMode: true,
       column: maxCols,
       cellHeight: getCellHeight(layoutSize),
-      margin: 2,
+      margin: 4,
       minRow: calculateMinRows(),
       float: true,
       animate: true,
@@ -443,14 +499,15 @@ export default function App() {
       // If a container was resized, make sure its subgrid column count matches
       if (items && gridInstance.current) {
         (items as any[]).forEach(item => {
-          if (item.subGrid) {
+          if (item && item.subGrid) {
+            let widthChanged = false;
             if (item.w !== item.subGrid.getColumn()) {
-              item.subGrid.column(item.w, 'move');
+              item.subGrid.column(item.w, 'list');
+              widthChanged = true;
             }
             if ((item.subGrid as any).updateMinSize) {
               setTimeout(() => {
                  (item.subGrid as any).updateMinSize();
-                 // Force a layout refresh for the parent grid so it reflects the snapped height
               }, 150);
             }
           }
@@ -495,6 +552,7 @@ export default function App() {
     
     window.addEventListener('contextmenu', (e) => {
       const target = e.target as HTMLElement;
+      if (target.closest('#app-context-menu')) return;
       const itemEl = target.closest('.grid-stack-item');
       if (itemEl) {
         e.preventDefault();
@@ -529,8 +587,11 @@ export default function App() {
       }
     });
 
-    window.addEventListener('click', () => {
-      setContextMenu(prev => prev.visible ? { ...prev, visible: false } : prev);
+    window.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('#app-context-menu')) {
+        setContextMenu(prev => prev.visible ? { ...prev, visible: false } : prev);
+      }
     });
 
     window.addEventListener('resize', debouncedResize);
@@ -605,7 +666,7 @@ export default function App() {
           title: existing.title,
           url: existing.url,
           iconUrl: existing.iconUrl,
-          sizeToContent: existing.sizeToContent,
+          
           x: item.x,
           y: item.y,
           w: item.w,
@@ -650,14 +711,14 @@ export default function App() {
       `;
     } else if (item.type === 'container') {
       htmlContent = `
-        <div class="grid-stack-item-content relative group bg-neutral-900 border border-neutral-800/80 rounded-2xl shadow-lg flex flex-col p-2">
-          <div class="flex justify-between items-center px-2 pb-2 border-b border-neutral-800/50 mb-2 pointer-events-none">
+        <div class="grid-stack-item-content relative group dynamic-ui-bg border border-neutral-800/80 rounded-2xl shadow-lg flex flex-col pt-1 pb-2 px-1 ">
+          <div class="flex justify-between items-center px-2 pb-1 border-b border-neutral-800/50 mb-0 pointer-events-none">
             <h3 class="font-semibold text-neutral-300 text-sm">${item.title}</h3>
             <button class="no-drag pointer-events-auto absolute top-2 right-2 p-1 bg-neutral-800 text-neutral-400 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-red-500 hover:text-white" onclick="window.removeShortcut('${item.id}')" title="Remove container">
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
             </button>
           </div>
-          <div class="grid-stack flex-1"></div>
+          <div class="grid-stack flex-1 pb-1 px-0 overflow-visible"></div>
         </div>
       `;
     } else {
@@ -672,8 +733,10 @@ export default function App() {
              onclick="if(!this.parentElement.classList.contains('ui-draggable-dragging') && !this.parentElement.classList.contains('grid-stack-item-dragging')) window.open('${item.url}', '_blank')">
 
           <div class="pointer-events-none w-full h-full flex flex-col items-center justify-between ${paddingClass}">
-            <div class="flex-1 w-full min-h-0 flex items-center justify-center mt-1">
-              <img src="${iconUrl}"  onload="if(this.naturalWidth < 64 && !this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.naturalWidth < 64 && this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; }" onerror="if(!this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; } else { this.onerror=null; }" alt="${item.title}" draggable="false" style="width: 100%; height: 100%; aspect-ratio: 1/1;" class="object-contain drop-shadow-md hover:drop-shadow-xl transition-transform duration-300 rounded-xl" />
+            <div class="flex-1 w-full min-h-0 flex items-center justify-center mt-1 p-1">
+              <div style="height: 100%; aspect-ratio: 1/1; ${item.iconBackground === 'white' ? 'background-color: white;' : item.iconBackground === 'black' ? 'background-color: black;' : ''}" class="flex items-center justify-center rounded-xl ${(item.iconBackground === 'white' || item.iconBackground === 'black') ? 'p-2' : ''} shadow-sm drop-shadow-md hover:drop-shadow-xl transition-all duration-300">
+                <img src="${iconUrl}"  onload="if(this.naturalWidth < 64 && !this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.naturalWidth < 64 && this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; }" onerror="if(!this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; } else { this.onerror=null; }" alt="${item.title}" draggable="false" style="width: 100%; height: 100%; object-fit: contain; ${item.invertIcon ? 'filter: invert(1);' : ''}" class="rounded-lg" />
+              </div>
             </div>
             <span style="${titleStyle}" class="font-medium text-neutral-300 truncate w-full text-center px-0.5 ${textMarginClass} tracking-wide drop-shadow-sm opacity-90 group-hover:opacity-100 transition-opacity">
               ${item.title}
@@ -691,6 +754,10 @@ export default function App() {
       h: item.h || 1,
       noResize: item.type !== 'container',
     };
+    if (item.type === 'container') {
+      opts.sizeToContent = true;
+    }
+    
     if (item.x !== undefined) opts.x = item.x;
     if (item.y !== undefined) opts.y = item.y;
 
@@ -712,31 +779,14 @@ export default function App() {
         const subGridEl = el.querySelector('.grid-stack') as HTMLElement;
         if (subGridEl) {
           const subGrid = GridStack.addGrid(subGridEl, {
+            disableOneColumnMode: true,
             cellHeight: getCellHeight(layoutSize),
-            margin: 2,
+            margin: 0,
             column: item.w || 4,
             acceptWidgets: true,
+            dragOut: true,
             float: false,
             disableResize: true
-          });
-          
-          subGrid.on('change', () => {
-            if ((subGrid as any).updateMinSize) {
-              (subGrid as any).updateMinSize();
-            }
-            saveGridState();
-          });
-          subGrid.on('added', () => {
-            if ((subGrid as any).updateMinSize) {
-              (subGrid as any).updateMinSize();
-            }
-            saveGridState();
-          });
-          subGrid.on('removed', () => {
-            if ((subGrid as any).updateMinSize) {
-              (subGrid as any).updateMinSize();
-            }
-            saveGridState();
           });
           
           (subGrid as any)._autoColumn = true;
@@ -747,27 +797,66 @@ export default function App() {
 
           const updateMinSize = () => {
             if (!subGrid.engine) return;
+
             const nodes = subGrid.engine.nodes;
             if (nodes.length === 0) {
-              grid.update(el, { minW: 1, h: 2 });
+              const node = el.gridstackNode;
+              const emptyMinH = 10;
+              if (!node || node.h < emptyMinH) {
+                grid.update(el, { minW: 1, minH: emptyMinH, h: emptyMinH });
+              } else {
+                if (node.minH !== emptyMinH) {
+                  grid.update(el, { minW: 1, minH: emptyMinH });
+                }
+              }
             } else {
-              const maxW = Math.max(...nodes.map(n => (n.x || 0) + (n.w || 1)));
-              const maxH = Math.max(...nodes.map(n => (n.y || 0) + (n.h || 1)));
+              let maxBottom = 0;
+              nodes.forEach((n: any) => {
+                const snappedY = Math.round((n.y || 0) / 8) * 8;
+                const bottom = snappedY + (n.h || 1);
+                if (bottom > maxBottom) maxBottom = bottom;
+              });
+              const requiredH = maxBottom + 2;
+              const node = el.gridstackNode;
               
-              const ch = getCellHeight(layoutSize);
-              const headerPx = 56; // 8px top pad + 8px bot pad + 36px header + buffer
-              const neededH = maxH + Math.ceil(headerPx / ch);
-              
-              
-              
-              grid.update(el, { minW: 1, h: neededH });
-              
+              // NEVER force 'h' down. Only force it UP if it's too small.
+              if (!node || node.h < requiredH) {
+                grid.update(el, { minW: 1, minH: requiredH, h: requiredH });
+              } else {
+                // If we don't need to change the height, only update minH if it changed, 
+                // to avoid triggering unnecessary grid reflows/changes.
+                if (node.minH !== requiredH) {
+                  grid.update(el, { minW: 1, minH: requiredH });
+                }
+              }
             }
           };
 
-          subGrid.on('added removed change', updateMinSize);
+          subGrid.on('added removed', () => updateMinSize());
+          subGrid.on('change', () => updateMinSize());
+          
+          subGrid.on('change', (e, items) => {
+            if (items) {
+              items.forEach(node => {
+                if (node.y !== undefined && node.y % 8 !== 0) {
+                  const newY = Math.round(node.y / 8) * 8;
+                  subGrid.update(node.el, { y: newY });
+                }
+              });
+            }
+          });
+          subGrid.on('added', (e, items) => {
+            if (items) {
+              items.forEach(node => {
+                if (node.y !== undefined && node.y % 8 !== 0) {
+                  const newY = Math.round(node.y / 8) * 8;
+                  subGrid.update(node.el, { y: newY });
+                }
+              });
+            }
+          });
           (subGrid as any).updateMinSize = updateMinSize;
-          setTimeout(updateMinSize, 50);
+          setTimeout(() => updateMinSize(true), 50);
         }
       }
   };
@@ -781,7 +870,7 @@ export default function App() {
       title: app.title,
       url: app.url,
       w: 1,
-      h: 1,
+      h: 8,
     };
 
     setShortcuts(prev => {
@@ -804,10 +893,9 @@ export default function App() {
       id: Math.random().toString(36).substring(2, 9),
       type: 'container',
       title: title.trim(),
-      url: '#', // unused for containers but required by type
-      w: Math.max(4, Math.floor(currentCols.current / 2)),
-      h: 3,
-      
+      url: '#',
+      w: 1, // 1 app wide
+      h: 10, // 8 for 1 app + 2 for container title
     };
     
     setShortcuts(prev => {
@@ -825,9 +913,11 @@ export default function App() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    const listLength = filteredApps.length > 0 ? filteredApps.length : searchResults.length;
+    
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlightedIndex(prev => Math.min(prev + 1, filteredApps.length - 1));
+      setHighlightedIndex(prev => Math.min(prev + 1, listLength - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setHighlightedIndex(prev => Math.max(prev - 1, 0));
@@ -835,47 +925,54 @@ export default function App() {
       e.preventDefault();
       if (filteredApps.length > 0) {
         handleAddShortcut(filteredApps[highlightedIndex]);
+      } else if (searchResults.length > 0) {
+        handleAddShortcut({ title: searchResults[highlightedIndex].title, url: searchResults[highlightedIndex].url, iconUrl: '' });
       } else if (searchQuery.trim().length > 0 && searchQuery.includes('.')) {
         const query = searchQuery.trim();
         const formattedUrl = /^https?:\/\//i.test(query) ? query : 'https://' + query;
         
         setIsInputFocused(false);
-        setIsAddingShortcut(true);
         setSearchQuery('');
 
-        console.log('Fetching scrape metadata for', formattedUrl); fetch('/api/scrape-metadata', {
+        const newId = 'shortcut_' + Date.now();
+        const fallbackDomain = (() => { try { return new URL(formattedUrl).hostname; } catch { return formattedUrl; } })();
+        const horseIcon = `https://icon.horse/icon/${fallbackDomain}`;
+        
+        const newItem = {
+          id: newId,
+          type: 'app' as const,
+          title: fallbackDomain,
+          url: formattedUrl,
+          iconUrl: horseIcon,
+          w: 1, h: 1
+        };
+
+        // Instantly add it
+        setShortcuts(prev => {
+          const updated = [...prev, newItem];
+          fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+          return updated;
+        });
+        addWidgetToGrid(newItem);
+
+        // Fetch metadata in the background
+        fetch('/api/scrape-metadata', {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: formattedUrl })
         })
         .then(res => res.json())
-        .then(data => { console.log('Scraped data:', data);
-          const newId = 'shortcut_' + Date.now();
+        .then(data => {
           let chosenIcon = data.icons?.[0];
-          const horseIcon = `https://icon.horse/icon/${new URL(formattedUrl).hostname}`;
+          let updatedTitle = (data.title && data.title.trim() && data.title !== 'error') ? data.title.trim() : fallbackDomain;
           
-          if (!chosenIcon || data.icons?.length === 0) {
-             chosenIcon = horseIcon;
-          }
-
-          const newItem = {
-            id: newId,
-            type: 'app' as const,
-            title: (data.title && data.title.trim() && data.title !== 'error') ? data.title.trim() : new URL(formattedUrl).hostname,
-            url: formattedUrl,
-            iconUrl: chosenIcon || horseIcon,
-            w: 1, h: 1
-          };
-          
-          setShortcuts(prev => {
-            const updated = [...prev, newItem];
-            fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
-            return updated;
+          updateShortcutDynamically(newId, {
+             title: updatedTitle,
+             iconUrl: chosenIcon || horseIcon
           });
-          addWidgetToGrid(newItem);
         })
-        .catch(err => console.error("Failed to add custom shortcut", err)).finally(() => setIsAddingShortcut(false));
+        .catch(err => console.error("Failed to add custom shortcut", err));
       }
     } else if (e.key === 'Escape') {
       setIsInputFocused(false);
@@ -884,6 +981,19 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-neutral-950 font-sans text-neutral-100 selection:bg-blue-500/30 overflow-x-hidden relative">
+      <style>{`
+        .dynamic-ui-bg {
+          background-color: rgba(23, 23, 23, ${uiOpacity / 100}) !important;
+          backdrop-filter: blur(${uiBlur}px) !important;
+          -webkit-backdrop-filter: blur(${uiBlur}px) !important;
+        }
+        .dynamic-header-bg {
+          background-color: rgba(0, 0, 0, ${(uiOpacity / 100) * 0.3}) !important;
+          backdrop-filter: blur(${uiBlur}px) !important;
+          -webkit-backdrop-filter: blur(${uiBlur}px) !important;
+        }
+      `}</style>
+
       {/* Background Media */}
       {activeBackground && activeBackground !== 'none' && (
         <div key={activeBackground} className="absolute inset-0 z-0 pointer-events-none">
@@ -926,7 +1036,7 @@ export default function App() {
 
       
       {/* Header */}
-      <header className="absolute top-0 left-0 w-full z-30 py-2.5 px-4 sm:px-6 pointer-events-none flex justify-between bg-black/30 backdrop-blur-md border-b border-white/10">
+      <header className="absolute top-0 left-0 w-full z-30 py-2.5 px-4 sm:px-6 pointer-events-none flex justify-between dynamic-header-bg border-b border-white/10">
         <div className="w-full mx-auto flex items-center justify-between">
           <div className="flex items-center pointer-events-auto">
             <span className="font-semibold text-lg tracking-tight">starterr</span>
@@ -1024,43 +1134,47 @@ export default function App() {
                         const formattedUrl = /^https?:\/\//i.test(query) ? query : 'https://' + query;
                         
                         setIsInputFocused(false);
-                        setIsAddingShortcut(true);
                         setSearchQuery('');
 
-                        console.log('Fetching scrape metadata for', formattedUrl); fetch('/api/scrape-metadata', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: formattedUrl })
+                        const newId = 'shortcut_' + Date.now();
+                        const fallbackDomain = (() => { try { return new URL(formattedUrl).hostname; } catch { return formattedUrl; } })();
+                        const horseIcon = `https://icon.horse/icon/${fallbackDomain}`;
+                        
+                        const newItem = {
+                          id: newId,
+                          type: 'app' as const,
+                          title: fallbackDomain,
+                          url: formattedUrl,
+                          iconUrl: horseIcon,
+                          w: 1, h: 1
+                        };
+
+                        // Instantly add it
+                        setShortcuts(prev => {
+                          const updated = [...prev, newItem];
+                          fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+                          return updated;
+                        });
+                        addWidgetToGrid(newItem);
+
+                        // Fetch metadata in the background
+                        fetch('/api/scrape-metadata', {
+                          method: 'POST',
+                          credentials: 'include',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ url: formattedUrl })
                         })
                         .then(res => res.json())
-                        .then(data => { console.log('Scraped data:', data);
-                          const newId = 'shortcut_' + Date.now();
+                        .then(data => {
                           let chosenIcon = data.icons?.[0];
-                          const horseIcon = `https://icon.horse/icon/${new URL(formattedUrl).hostname}`;
+                          let updatedTitle = (data.title && data.title.trim() && data.title !== 'error') ? data.title.trim() : fallbackDomain;
                           
-                          if (!chosenIcon || data.icons?.length === 0) {
-                             chosenIcon = horseIcon;
-                          }
-
-                          const newItem = {
-                            id: newId,
-                            type: 'app' as const,
-                            title: (data.title && data.title.trim() && data.title !== 'error') ? data.title.trim() : new URL(formattedUrl).hostname,
-                            url: formattedUrl,
-                            iconUrl: chosenIcon || horseIcon,
-                            w: 1, h: 1
-                          };
-                          
-                          setShortcuts(prev => {
-                            const updated = [...prev, newItem];
-                            fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
-                            return updated;
+                          updateShortcutDynamically(newId, {
+                             title: updatedTitle,
+                             iconUrl: chosenIcon || horseIcon
                           });
-                          addWidgetToGrid(newItem);
                         })
-                        .catch(err => console.error("Failed to add custom shortcut", err))
-                        .finally(() => setIsAddingShortcut(false));
+                        .catch(err => console.error("Failed to add custom shortcut", err));
                       } else if (filteredApps.length > 0) {
                         handleAddShortcut(filteredApps[highlightedIndex]);
                       }
@@ -1120,13 +1234,65 @@ export default function App() {
                       </li>
                     ))}
                   </ul>
+                ) : searchResults.length > 0 ? (
+                  <ul className="py-2">
+                    <li className="px-4 py-1 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-neutral-900 sticky top-0">Web Search</li>
+                    {searchResults.map((res, idx) => (
+                      <li 
+                        key={idx}
+                        className={`px-4 py-3 flex items-center gap-3 cursor-pointer ${
+                          idx === highlightedIndex 
+                            ? 'bg-blue-600/20 text-white border-l-2 border-blue-500' 
+                            : 'text-neutral-400 hover:bg-neutral-800 hover:text-white border-l-2 border-transparent'
+                        }`}
+                        onMouseEnter={() => setHighlightedIndex(idx)}
+                        onMouseDown={(e) => { e.preventDefault(); handleAddShortcut({ title: res.title, url: res.url, iconUrl: '' }); }}
+                      >
+                        <div className="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                           <img 
+                             src={getFaviconUrl(res.url)}
+                             onError={(e) => {
+                               const target = e.currentTarget;
+                               try {
+                                 const domain = new URL(res.url).hostname;
+                                 if (target.dataset.fallback === '1') {
+                                   target.onerror = null;
+                                   target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(res.title || 'U')}&background=262626&color=fff&size=64`;
+                                 } else {
+                                   target.dataset.fallback = '1';
+                                   target.src = `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`;
+                                 }
+                               } catch {
+                                 target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(res.title || 'U')}&background=262626&color=fff&size=64`;
+                               }
+                             }}
+                             className="w-full h-full object-cover"
+                             alt=""
+                           />
+                        </div>
+                        <div className="flex flex-col overflow-hidden">
+                          <span className="text-sm font-medium text-neutral-200 truncate">{res.title}</span>
+                          <span className="text-xs text-neutral-500 truncate">{res.url.replace(/^https?:\/\//, '')}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 ) : (
                   <div className="px-4 py-6 text-center">
-                    <p className="text-neutral-400 text-sm mb-1">No matching apps found</p>
-                    {searchQuery.includes('.') ? (
-                      <p className="text-neutral-500 text-xs">Press Enter to add custom URL</p>
+                    {isSearching ? (
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                        <p className="text-neutral-500 text-xs">Searching web...</p>
+                      </div>
                     ) : (
-                      <p className="text-neutral-500 text-xs">Type a valid URL to add</p>
+                      <>
+                        <p className="text-neutral-400 text-sm mb-1">No matching apps found</p>
+                        {searchQuery.includes('.') ? (
+                          <p className="text-neutral-500 text-xs">Press Enter to add custom URL</p>
+                        ) : (
+                          <p className="text-neutral-500 text-xs">Type a valid URL to add</p>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
@@ -1231,6 +1397,7 @@ export default function App() {
                     className="w-full accent-blue-500"
                   />
                 </div>
+
               </div>
             </div>
           </section>
@@ -1255,6 +1422,35 @@ export default function App() {
           {/* Categories & Containers */}
           <section>
             <h3 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider mb-4">Category Containers</h3>
+            <div className="space-y-4 mb-8">
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <label className="text-sm text-neutral-400">UI Opacity</label>
+                  <span className="text-sm font-medium text-neutral-300">{uiOpacity}%</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0" max="100" 
+                  value={uiOpacity} 
+                  onChange={(e) => setUiOpacity(Number(e.target.value))}
+                  className="w-full accent-blue-500"
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <label className="text-sm text-neutral-400">UI Blur</label>
+                  <span className="text-sm font-medium text-neutral-300">{uiBlur}px</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0" max="64" 
+                  value={uiBlur} 
+                  onChange={(e) => setUiBlur(Number(e.target.value))}
+                  className="w-full accent-blue-500"
+                />
+              </div>
+            </div>
+            
             <p className="text-sm text-neutral-400 mb-4">Add visual separators to organize your dashboard.</p>
             
             <div className="flex space-x-2 mb-6">
@@ -1302,6 +1498,7 @@ export default function App() {
       {/* Context Menu */}
       {contextMenu.visible && contextMenu.shortcut && (
         <div 
+          id="app-context-menu"
           className="fixed z-[99999] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-3 w-64 animate-in fade-in zoom-in duration-150 flex flex-col"
           style={{ top: contextMenu.y, left: contextMenu.x, zIndex: 999999 }}
           onMouseLeave={() => setContextMenu(prev => ({ ...prev, visible: false }))}
@@ -1314,6 +1511,11 @@ export default function App() {
                ) : (
                  <img 
                       src={contextMenu.shortcut.iconUrl || getFaviconUrl(contextMenu.shortcut.url)} 
+                      style={{
+                        filter: contextMenu.shortcut.invertIcon ? 'invert(1)' : 'none',
+                        backgroundColor: contextMenu.shortcut.iconBackground === 'white' ? 'white' : contextMenu.shortcut.iconBackground === 'black' ? 'black' : 'transparent',
+                        padding: contextMenu.shortcut.iconBackground === 'white' || contextMenu.shortcut.iconBackground === 'black' ? '2px' : '0'
+                      }} 
                       onError={(e) => { 
                         const target = e.currentTarget;
                         try {
@@ -1386,18 +1588,31 @@ export default function App() {
                   } catch(e) {}
                   if (!domain) return null;
                   
-                  const quickIcons = [
+                  const sanitizedTitle = (contextMenu.shortcut.title || '').toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+                  let quickIcons = [
                     `https://icon.horse/icon/${domain}`,
                     `https://logo.clearbit.com/${domain}`,
                     `https://icons.duckduckgo.com/ip3/${domain}.ico`,
                     `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`
                   ];
+                  if (sanitizedTitle) {
+                    quickIcons.unshift(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${sanitizedTitle}.png`);
+                    quickIcons.unshift(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${sanitizedTitle}.svg`);
+                    if (sanitizedTitle.includes('-')) {
+                      const noDash = sanitizedTitle.replace(/-/g, '');
+                      quickIcons.unshift(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${noDash}.png`);
+                      quickIcons.unshift(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${noDash}.svg`);
+                    }
+                  }
+                  // Deduplicate array just in case
+                  const uniqueQuickIcons = [...new Set(quickIcons)];
+                  
                   
                   return (
                     <div className="flex flex-col space-y-1 mt-3">
                        <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-0.5">Quick Icons</label>
                        <div className="flex gap-2">
-                          {quickIcons.map((ico, idx) => (
+                          {uniqueQuickIcons.map((ico, idx) => (
                              <button 
                                 key={idx}
                                 onClick={() => {
@@ -1413,6 +1628,43 @@ export default function App() {
                     </div>
                   );
                 })()}
+                
+                <div className="flex flex-col space-y-2 mt-3 border-t border-neutral-800/50 pt-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">Invert Color</label>
+                    <div 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        const newVal = !contextMenu.shortcut.invertIcon;
+                        updateShortcutDynamically(contextMenu.shortcut!.id, { invertIcon: newVal });
+                        setContextMenu(prev => ({ ...prev, shortcut: { ...prev.shortcut!, invertIcon: newVal } }));
+                      }}
+                      className={`cursor-pointer min-w-[40px] w-10 h-5 rounded-full transition-colors relative flex items-center px-0.5 shrink-0 ${contextMenu.shortcut.invertIcon ? 'bg-blue-500' : 'bg-neutral-700'}`}
+                    >
+                      <div className={`w-4 h-4 rounded-full bg-white transition-transform shadow-sm ${contextMenu.shortcut.invertIcon ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col space-y-1">
+                    <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-0.5">Icon Background</label>
+                    <div className="flex gap-2">
+                      {(['transparent', 'white', 'black'] as const).map(bg => (
+                        <button
+                          key={bg}
+                          onClick={() => {
+                            updateShortcutDynamically(contextMenu.shortcut!.id, { iconBackground: bg });
+                            setContextMenu(prev => ({ ...prev, shortcut: { ...prev.shortcut!, iconBackground: bg } }));
+                          }}
+                          className={`flex-1 py-1.5 text-[10px] rounded-md capitalize transition-colors border ${contextMenu.shortcut.iconBackground === bg || (!contextMenu.shortcut.iconBackground && bg === 'transparent') ? 'bg-blue-500/20 text-blue-400 border-blue-500/50' : 'bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800'}`}
+                        >
+                          {bg === 'transparent' ? 'None' : bg}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
               </>
             )}
           </div>

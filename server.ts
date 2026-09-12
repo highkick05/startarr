@@ -1,4 +1,37 @@
 import express from "express";
+async function getVerifiedWalkxcode(title) {
+  if (!title) return [];
+  const words = title.split(/[\s\|]+/).filter(w => w.length >= 2);
+  words.unshift(title); // Try full string first
+  
+  // Build a list of potential sanitizations
+  const candidates = new Set();
+  
+  for (const word of words) {
+    const dashed = word.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const squished = word.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (dashed) candidates.add(dashed);
+    if (squished) candidates.add(squished);
+  }
+
+  for (const sanitized of candidates) {
+    try {
+      const svgUrl = `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${sanitized}.svg`;
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 1200);
+      const res = await fetch(svgUrl, { method: 'HEAD', signal: controller.signal });
+      clearTimeout(id);
+      
+      if (res.ok) {
+        return [svgUrl, `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${sanitized}.png`];
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  return [];
+}
+
 import path from "path";
 import fs from "fs";
 import multer from "multer";
@@ -59,8 +92,8 @@ app.post("/api/auth/register", async (req, res) => {
     
     // Default settings
     await db.run(
-      "INSERT INTO settings (user_id, active_background, tint_color, tint_opacity, layout_size, shortcuts_json) VALUES (?, ?, ?, ?, ?, ?)", 
-      [userId, "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=2560&q=80", "#000000", 40, "medium", "[]"]
+      "INSERT INTO settings (user_id, active_background, tint_color, tint_opacity, ui_opacity, ui_blur, layout_size, shortcuts_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
+      [userId, "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=2560&q=80", "#000000", 40, 100, 16, "medium", "[]"]
     );
     
     const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
@@ -104,7 +137,7 @@ app.get("/api/settings", requireAuth, async (req: any, res) => {
 
 app.put("/api/settings", requireAuth, async (req: any, res) => {
   console.log("PUT RECEIVED BODY:", req.body);
-  const { active_background, tint_color, tint_opacity, layout_size, shortcuts_json } = req.body;
+  const { active_background, tint_color, tint_opacity, ui_opacity, ui_blur, layout_size, shortcuts_json } = req.body;
   const db = await getDb();
   
   // Update fields conditionally if they exist in req.body
@@ -115,6 +148,8 @@ app.put("/api/settings", requireAuth, async (req: any, res) => {
   if (active_background !== undefined) { updates.push("active_background = ?"); values.push(active_background); }
   if (tint_color !== undefined) { updates.push("tint_color = ?"); values.push(tint_color); }
   if (tint_opacity !== undefined) { updates.push("tint_opacity = ?"); values.push(tint_opacity); }
+  if (ui_opacity !== undefined) { updates.push("ui_opacity = ?"); values.push(ui_opacity); }
+  if (ui_blur !== undefined) { updates.push("ui_blur = ?"); values.push(ui_blur); }
   if (layout_size !== undefined) { updates.push("layout_size = ?"); values.push(layout_size); }
   if (shortcuts_json !== undefined) { updates.push("shortcuts_json = ?"); values.push(shortcuts_json); }
   
@@ -166,28 +201,63 @@ fetch('https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/tree.j
   })
   .catch(err => console.error("Failed to fetch online dictionary", err));
 
+function decodeHTMLEntities(text: string) {
+    const entities: Record<string, string> = {
+        '&amp;': '&',
+        '&lt;': '<',
+        '&gt;': '>',
+        '&quot;': '"',
+        '&#39;': "'",
+        '&apos;': "'",
+        '&#x2F;': '/',
+        '&#x60;': '`',
+        '&#x3D;': '='
+    };
+    return text.replace(/&[#a-z0-9]+;/gi, (match) => {
+        if (entities[match.toLowerCase()]) {
+            return entities[match.toLowerCase()];
+        }
+        if (match.startsWith('&#x')) {
+            return String.fromCharCode(parseInt(match.slice(3, -1), 16));
+        }
+        if (match.startsWith('&#')) {
+            return String.fromCharCode(parseInt(match.slice(2, -1), 10));
+        }
+        return match;
+    });
+}
+
 function getBetterTitle(title: string, urlString: string) {
+    let finalTitle = decodeHTMLEntities((title || '').trim());
+    
+    // Strip common prefixes/suffixes
+    const noiseRegex = /^(sign\s?in|log\s?in|welcome( to)?)\s*[-|:]?\s*|\s*[-|:]?\s*(sign\s?in|log\s?in|dashboard|home|welcome)$/gi;
+    finalTitle = finalTitle.replace(noiseRegex, '').trim();
+
     const genericTitles = ['login', 'home', 'dashboard', 'welcome', 'index', 'sign in'];
-    const lowerTitle = (title || '').toLowerCase();
-    let finalTitle = title || '';
+    const lowerTitle = finalTitle.toLowerCase();
     
     const isDomain = /^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(finalTitle);
-    if (!finalTitle || genericTitles.includes(lowerTitle) || finalTitle.includes('://') || isDomain) {
-        let hostname = '';
-        try {
-            hostname = new URL(urlString).hostname.toLowerCase();
-        } catch(e) { return finalTitle; }
-        
-        let foundBetterTitle = false;
+    
+    let hostname = '';
+    try {
+        hostname = new URL(urlString).hostname.toLowerCase();
+    } catch(e) { /* ignore */ }
+    
+    // ALWAYS check dictionary first based on hostname if available
+    let foundInDict = false;
+    if (hostname) {
         for (const [key, name] of Object.entries(appDictionary)) {
             if (hostname.includes(key)) {
                 finalTitle = name;
-                foundBetterTitle = true;
+                foundInDict = true;
                 break;
             }
         }
-        
-        if (!foundBetterTitle) {
+    }
+    
+    if (!foundInDict && (!finalTitle || genericTitles.includes(lowerTitle) || finalTitle.includes('://') || isDomain)) {
+        if (hostname) {
            const parts = hostname.split('.');
            if (parts.length > 0 && parts[0] !== 'www') {
                finalTitle = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
@@ -248,20 +318,64 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
     resolvedIcons.push(`https://icon.horse/icon/${baseUrl.hostname}`);
     resolvedIcons.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${baseUrl.origin}&size=128`);
 
-    res.json({ title: getBetterTitle(title || '', baseUrl.href), icons: [...new Set(resolvedIcons)] });
+    const finalTitle = getBetterTitle(title || '', baseUrl.href);
+    
+    if (finalTitle) {
+      const validWalkx = await getVerifiedWalkxcode(finalTitle);
+      if (validWalkx.length > 0) {
+        resolvedIcons.unshift(...validWalkx.reverse());
+      }
+    }
+
+    res.json({ title: finalTitle, icons: [...new Set(resolvedIcons)] });
   } catch (err) {
     try {
       const u = new URL(url.startsWith('http') ? url : 'https://' + url);
+      const fallbackTitle = getBetterTitle('', u.href);
+      const fallbackIcons = [];
+      if (fallbackTitle) {
+        const validWalkx = await getVerifiedWalkxcode(fallbackTitle);
+        fallbackIcons.push(...validWalkx);
+      }
+      fallbackIcons.push(`https://icon.horse/icon/${u.hostname}`);
+      fallbackIcons.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${u.origin}&size=128`);
+      
       res.json({
-        title: getBetterTitle('', u.href),
-        icons: [
-          `https://icon.horse/icon/${u.hostname}`,
-          `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${u.origin}&size=128`
-        ]
+        title: fallbackTitle,
+        icons: fallbackIcons
       });
     } catch {
        res.status(400).json({ error: "Invalid URL" });
     }
+  }
+});
+
+
+// Real-time web search via DuckDuckGo HTML
+app.get("/api/search", async (req: any, res) => {
+  const query = req.query.q;
+  if (!query) return res.json({ results: [] });
+  try {
+    const response = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+    });
+    const html = await response.text();
+    const results = [];
+    const regex = /<a rel="nofollow" class="result__a" href="([^"]+)">([\s\S]*?)<\/a>/gi;
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+      let url = match[1];
+      if (url.startsWith('//duckduckgo.com/l/?uddg=')) {
+          url = decodeURIComponent(url.split('uddg=')[1].split('&')[0]);
+      }
+      let title = match[2].replace(/<\/?[^>]+(>|$)/g, "").trim();
+      if (title && url) {
+         results.push({ title, url });
+      }
+    }
+    res.json({ results: results.slice(0, 5) }); // return top 5
+  } catch (err) {
+    res.json({ results: [] });
   }
 });
 

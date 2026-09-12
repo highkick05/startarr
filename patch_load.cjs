@@ -1,32 +1,19 @@
 const fs = require('fs');
 let code = fs.readFileSync('src/App.tsx', 'utf8');
 
-// Replace the localStorage logic
-const oldLocalStr = `          return parsed.map((p: any) => ({
-            ...p,
-            w: p.type === 'category' ? p.w : 1,
-            h: p.type === 'category' ? p.h : 1,
-            ...(p.type !== 'category' && p.w !== 1 ? { x: undefined, y: undefined } : {})
-          }));`;
-const newLocalStr = `          return parsed.map((p: any) => ({
-            ...p,
-            w: p.type === 'app' ? 1 : p.w,
-            h: p.type === 'app' ? 1 : p.h
-          }));`;
-code = code.replace(oldLocalStr, newLocalStr);
-
-// Replace the fetch API logic
-const oldFetchStr = `            setShortcuts(parsed.map((p: any) => ({
-              ...p,
-              w: p.type === 'category' ? p.w : 1,
-              h: p.type === 'category' ? p.h : 1
-            })));`;
-const newFetchStr = `            setShortcuts(parsed.map((p: any) => ({
+const targetLoad = `setShortcuts(parsed.map((p: any) => ({
               ...p,
               w: p.type === 'app' ? 1 : p.w,
               h: p.type === 'app' ? 1 : p.h
-            })));
-            // Also need to re-render grid since API loaded!`;
-code = code.replace(oldFetchStr, newFetchStr);
-
+            })));`;
+const newLoad = `setShortcuts(parsed.map((p: any) => ({
+              ...p,
+              w: p.type === 'app' ? 1 : p.w,
+              // Multiply h by 8 if it's the old 1x format. 
+              // We assume old apps have h:1. Old containers have h:2 or 3.
+              // New apps will have h:8.
+              h: (p.type === 'app' && p.h < 8) ? 8 : (p.type === 'container' && p.h < 8 ? p.h * 8 : p.h)
+            })));`;
+code = code.replace(targetLoad, newLoad);
 fs.writeFileSync('src/App.tsx', code);
+console.log("Patched load!");

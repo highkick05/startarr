@@ -8,7 +8,6 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 }
 
 const DB_FILE = path.join(UPLOADS_DIR, 'database.sqlite');
-
 let dbInstance: any = null;
 
 export async function getDb() {
@@ -30,6 +29,8 @@ export async function getDb() {
       active_background TEXT,
       tint_color TEXT,
       tint_opacity INTEGER,
+      ui_opacity INTEGER DEFAULT 100,
+      ui_blur INTEGER DEFAULT 16,
       layout_size TEXT,
       shortcuts_json TEXT,
       FOREIGN KEY(user_id) REFERENCES users(id)
@@ -46,6 +47,17 @@ export async function getDb() {
     );
   `);
 
+  try {
+    await dbInstance.execute("ALTER TABLE settings ADD COLUMN ui_opacity INTEGER DEFAULT 100;");
+  } catch (e) {
+    // Column already exists
+  }
+
+  try {
+    await dbInstance.execute("ALTER TABLE settings ADD COLUMN ui_blur INTEGER DEFAULT 16;");
+  } catch (e) {
+    // Column already exists
+  }
   // add helper methods to mimic the old sqlite/sqlite3 api for easy migration in server.ts
   dbInstance.run = async (sql: string, args: any[] = []) => {
     const res = await dbInstance.execute({ sql, args });
