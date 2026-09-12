@@ -231,7 +231,7 @@ export default function App() {
 
   const [backgrounds, setBackgrounds] = useState<any[]>([]);
   const [activeBackground, setActiveBackground] = useState('https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=2560&q=80');
-  console.log("Current activeBackground:", activeBackground);
+  
   const [tintColor, setTintColor] = useState('#000000');
   const [tintOpacity, setTintOpacity] = useState(40);
   const [uiOpacity, setUiOpacity] = useState(100);
@@ -246,7 +246,7 @@ export default function App() {
         }
         return [];
       })
-      .then(data => { console.log('Scraped data:', data);
+      .then(data => { 
         if (Array.isArray(data)) setBackgrounds(data);
       })
       .catch(() => {});
