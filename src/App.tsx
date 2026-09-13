@@ -817,6 +817,24 @@ export default function App() {
             }
           };
 
+          subGrid.on('dragstart', (e, el) => {
+            if (subGridEl) {
+              const parentContainer = subGridEl.closest('.grid-stack-item');
+              if (parentContainer) {
+                parentContainer.classList.add('subgrid-is-dragging');
+                parentContainer.style.zIndex = '99999';
+              }
+            }
+          });
+          subGrid.on('dragstop', (e, el) => {
+            if (subGridEl) {
+              const parentContainer = subGridEl.closest('.grid-stack-item');
+              if (parentContainer) {
+                parentContainer.classList.remove('subgrid-is-dragging');
+                parentContainer.style.zIndex = '';
+              }
+            }
+          });
           subGrid.on('added removed', () => updateMinSize());
           subGrid.on('change', () => updateMinSize());
           
