@@ -753,7 +753,7 @@ export default function App() {
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
             </button>
           </div>
-          <div class="grid-stack my-auto px-0 overflow-visible w-full"></div>
+          <div class="grid-stack flex-1 mt-1 px-0 overflow-visible w-full"></div>
         </div>
       `;
     } else {
@@ -835,7 +835,7 @@ export default function App() {
             if (!subGrid.engine) return;
             const nodes = subGrid.engine.nodes;
             
-            let extra = layoutSize === 'small' ? 3 : layoutSize === 'large' ? 2 : 2;
+            let extra = layoutSize === 'small' ? 4 : layoutSize === 'large' ? 3 : 4;
             let requiredH = 8 + extra;
             if (nodes.length > 0) {
               let maxBottom = 0;
@@ -934,7 +934,7 @@ export default function App() {
       title: title.trim(),
       url: '#',
       w: 1, // 1 app wide
-      h: 8 + (layoutSize === 'small' ? 3 : layoutSize === 'large' ? 2 : 2), // 8 for 1 app + extra for padding
+      h: 8 + (layoutSize === 'small' ? 4 : layoutSize === 'large' ? 3 : 4), // 8 for 1 app + extra for padding
     };
     
     setShortcuts(prev => {
