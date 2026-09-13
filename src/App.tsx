@@ -787,7 +787,6 @@ export default function App() {
             dragOut: true,
             float: false,
             disableResize: true,
-            draggable: { appendTo: 'body', cancel: '.no-drag' },
             draggable: { appendTo: 'body', cancel: '.no-drag' }
           });
           
