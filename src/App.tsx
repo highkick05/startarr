@@ -727,9 +727,13 @@ export default function App() {
     
     let htmlContent = '';
     const isSmall = layoutSize === 'small';
-    const paddingClass = isSmall ? 'p-1' : 'p-2';
-    const textMarginClass = isSmall ? 'mt-0' : 'mt-1';
-    const titleStyle = isSmall ? 'font-size: 0.6rem; line-height: 0.8rem;' : 'font-size: clamp(0.65rem, 2vw, 0.75rem);';
+    const isLarge = layoutSize === 'large';
+    const paddingClass = isSmall ? 'p-1 pb-2' : isLarge ? 'p-3' : 'p-2';
+    const textMarginClass = isSmall ? 'mt-0 mb-0.5' : isLarge ? 'mt-2' : 'mt-1';
+    const titleStyle = isSmall ? 'font-size: 0.6rem; line-height: 0.8rem;' : isLarge ? 'font-size: clamp(0.75rem, 2.5vw, 0.9rem);' : 'font-size: clamp(0.65rem, 2vw, 0.75rem);';
+    const iconWrapperClass = isSmall ? 'mt-0 p-0' : isLarge ? 'mt-2 p-1' : 'mt-1 p-1';
+    const containerPt = isSmall ? 'pt-0' : 'pt-1';
+    const containerPb = isSmall ? 'pb-1' : isLarge ? 'pb-1' : 'pb-2';
 
     if (item.type === 'category') {
       htmlContent = `
@@ -742,7 +746,7 @@ export default function App() {
       `;
     } else if (item.type === 'container') {
       htmlContent = `
-        <div class="grid-stack-item-content relative group dynamic-ui-bg border border-neutral-800/80 rounded-2xl shadow-lg flex flex-col pt-1 pb-2 px-1 ">
+        <div class="grid-stack-item-content relative group dynamic-ui-bg border border-neutral-800/80 rounded-2xl shadow-lg flex flex-col ${containerPt} ${containerPb} px-1 ">
           <div class="flex justify-between items-center px-2 pb-1 border-b border-neutral-800/50 mb-0 pointer-events-none">
             <h3 class="font-semibold text-neutral-300 text-sm">${item.title}</h3>
             <button class="no-drag pointer-events-auto absolute top-2 right-2 p-1 bg-neutral-800 text-neutral-400 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-red-500 hover:text-white" onclick="window.removeShortcut('${item.id}')" title="Remove container">
@@ -764,7 +768,7 @@ export default function App() {
              onclick="if(!this.parentElement.classList.contains('ui-draggable-dragging') && !this.parentElement.classList.contains('grid-stack-item-dragging')) window.open('${item.url}', '_blank')">
 
           <div class="pointer-events-none w-full h-full flex flex-col items-center justify-between ${paddingClass}">
-            <div class="flex-1 w-full min-h-0 flex items-center justify-center mt-1 p-1">
+            <div class="flex-1 w-full min-h-0 flex items-center justify-center ${iconWrapperClass}">
               <div style="height: 100%; aspect-ratio: 1/1; ${item.iconBackground === 'white' ? 'background-color: white;' : item.iconBackground === 'black' ? 'background-color: black;' : ''}" class="flex items-center justify-center rounded-xl ${(item.iconBackground === 'white' || item.iconBackground === 'black') ? 'p-2' : ''} shadow-sm drop-shadow-md hover:drop-shadow-xl transition-all duration-300">
                 <img src="${iconUrl}"  onload="if(this.naturalWidth < 64 && !this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.naturalWidth < 64 && this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; }" onerror="if(!this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; } else { this.onerror=null; }" alt="${item.title}" draggable="false" style="width: 100%; height: 100%; object-fit: contain; ${item.invertIcon ? 'filter: invert(1);' : ''}" class="rounded-lg" />
               </div>
@@ -831,7 +835,8 @@ export default function App() {
             if (!subGrid.engine) return;
             const nodes = subGrid.engine.nodes;
             
-            let requiredH = 12;
+            let extra = layoutSize === 'small' ? 5 : layoutSize === 'large' ? 3 : 4;
+            let requiredH = 8 + extra;
             if (nodes.length > 0) {
               let maxBottom = 0;
               nodes.forEach((n: any) => {
@@ -839,7 +844,7 @@ export default function App() {
                 const bottom = snappedY + (n.h || 1);
                 if (bottom > maxBottom) maxBottom = bottom;
               });
-              requiredH = maxBottom + 4;
+              requiredH = maxBottom + extra;
             }
             
             const node = el.gridstackNode;
