@@ -835,7 +835,7 @@ export default function App() {
             if (!subGrid.engine) return;
             const nodes = subGrid.engine.nodes;
             
-            let extra = layoutSize === 'small' ? 5 : layoutSize === 'large' ? 3 : 4;
+            let extra = layoutSize === 'small' ? 3 : layoutSize === 'large' ? 2 : 3;
             let requiredH = 8 + extra;
             if (nodes.length > 0) {
               let maxBottom = 0;
@@ -934,7 +934,7 @@ export default function App() {
       title: title.trim(),
       url: '#',
       w: 1, // 1 app wide
-      h: 8 + (layoutSize === 'small' ? 5 : layoutSize === 'large' ? 3 : 4), // 8 for 1 app + extra for padding
+      h: 8 + (layoutSize === 'small' ? 3 : layoutSize === 'large' ? 2 : 3), // 8 for 1 app + extra for padding
     };
     
     setShortcuts(prev => {
