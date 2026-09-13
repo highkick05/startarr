@@ -8,3 +8,32 @@
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
 }
+
+.ui-draggable-dragging, .grid-stack-item-dragging {
+  z-index: 99999 !important;
+}
+
+.grid-stack-item.ui-draggable-dragging {
+  z-index: 99999 !important;
+}
+
+
+.grid-stack-item.ui-draggable-dragging, 
+.grid-stack-item.grid-stack-item-dragging, 
+.grid-stack-item.is-dragging, 
+.ui-draggable-dragging {
+  z-index: 99999 !important;
+}
+
+.grid-stack-item.ui-draggable-dragging, 
+.grid-stack-item.grid-stack-item-dragging, 
+.grid-stack-item.is-dragging, 
+.ui-draggable-dragging {
+  z-index: 99999 !important;
+  opacity: 1 !important;
+}
+
+/* Ensure containers stay behind dragged items */
+.grid-stack-item:not(.ui-draggable-dragging):not(.grid-stack-item-dragging) {
+  z-index: 10;
+}

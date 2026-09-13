@@ -469,7 +469,7 @@ export default function App() {
       disableResize: false,
       acceptWidgets: true,
       draggable: {
-        cancel: '.no-drag' // don't drag if clicking buttons like remove
+        cancel: '.no-drag', appendTo: 'body'
       }
     }, gridContainerRef.current);
 
