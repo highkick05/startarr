@@ -934,7 +934,7 @@ export default function App() {
       title: title.trim(),
       url: '#',
       w: 1, // 1 app wide
-      h: 12, // 8 for 1 app + 4 for container title/padding
+      h: 8 + (layoutSize === 'small' ? 5 : layoutSize === 'large' ? 3 : 4), // 8 for 1 app + extra for padding
     };
     
     setShortcuts(prev => {
