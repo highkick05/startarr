@@ -733,7 +733,7 @@ export default function App() {
     const titleStyle = isSmall ? 'font-size: 0.6rem; line-height: 0.8rem;' : isLarge ? 'font-size: clamp(0.75rem, 2.5vw, 0.9rem);' : 'font-size: clamp(0.65rem, 2vw, 0.75rem);';
     const iconWrapperClass = isSmall ? 'mt-0 p-0' : isLarge ? 'mt-2 p-1' : 'mt-1 p-1';
     const containerPt = isSmall ? 'pt-0' : 'pt-1';
-    const containerPb = isSmall ? 'pb-1' : isLarge ? 'pb-1' : 'pb-2';
+    const containerPb = isSmall ? 'pb-0' : isLarge ? 'pb-0' : 'pb-1';
 
     if (item.type === 'category') {
       htmlContent = `
@@ -835,7 +835,7 @@ export default function App() {
             if (!subGrid.engine) return;
             const nodes = subGrid.engine.nodes;
             
-            let extra = layoutSize === 'small' ? 3 : layoutSize === 'large' ? 2 : 3;
+            let extra = layoutSize === 'small' ? 4 : layoutSize === 'large' ? 3 : 3;
             let requiredH = 8 + extra;
             if (nodes.length > 0) {
               let maxBottom = 0;
@@ -934,7 +934,7 @@ export default function App() {
       title: title.trim(),
       url: '#',
       w: 1, // 1 app wide
-      h: 8 + (layoutSize === 'small' ? 3 : layoutSize === 'large' ? 2 : 3), // 8 for 1 app + extra for padding
+      h: 8 + (layoutSize === 'small' ? 4 : layoutSize === 'large' ? 3 : 3), // 8 for 1 app + extra for padding
     };
     
     setShortcuts(prev => {
