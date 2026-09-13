@@ -50,6 +50,37 @@ export default function App() {
   }, []);
 
   const gridContainerRef = useRef<HTMLDivElement>(null);
+
+    // Absolute fallback: globally observe for dragged items
+    useEffect(() => {
+      const observer = new MutationObserver((mutations) => {
+      mutations.forEach(mutation => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+          const target = mutation.target;
+          if (target instanceof HTMLElement) {
+            if (target.classList.contains('ui-draggable-dragging') || target.classList.contains('grid-stack-item-dragging')) {
+              const parent = target.parentElement?.closest('.grid-stack-item');
+              if (parent) {
+                parent.classList.add('subgrid-is-dragging');
+                parent.style.zIndex = '2147483647';
+              }
+            } 
+          }
+          
+          // Clean up if nothing is being dragged anywhere
+          if (!document.querySelector('.ui-draggable-dragging, .grid-stack-item-dragging')) {
+             document.querySelectorAll('.subgrid-is-dragging').forEach(el => {
+               el.classList.remove('subgrid-is-dragging');
+               el.style.zIndex = '';
+             });
+          }
+        }
+      });
+    });
+    observer.observe(document.body, { attributes: true, subtree: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+
   const gridInstance = useRef<GridStack | null>(null);
   const itemRegistry = useRef<Map<string, ShortcutItem>>(new Map());
 

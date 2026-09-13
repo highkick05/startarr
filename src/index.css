@@ -34,6 +34,47 @@
 }
 
 /* Ensure containers stay behind dragged items */
-.grid-stack-item:not(.ui-draggable-dragging):not(.grid-stack-item-dragging) {
+.grid-stack-item:not(.ui-draggable-dragging):not(.grid-stack-item-dragging):not(.subgrid-is-dragging) {
   z-index: 10;
+}
+
+
+.grid-stack-item-content {
+  overflow: visible !important;
+}
+
+.grid-stack-item {
+  z-index: 10;
+}
+
+
+/* Absolute guarantee dragged items are on top */
+.ui-draggable-dragging,
+.grid-stack-item-dragging {
+  z-index: 2147483647 !important;
+}
+
+.grid-stack-item.subgrid-is-dragging {
+  z-index: 2147483647 !important;
+}
+
+/* Ensure any dragged element, anywhere, is always on top */
+.ui-draggable-dragging,
+.grid-stack-item-dragging,
+.is-dragging,
+.grid-stack-item.ui-draggable-dragging,
+.grid-stack-item.grid-stack-item-dragging,
+.grid-stack-item.is-dragging {
+  z-index: 2147483647 !important;
+  
+}
+
+/* Ensure the source container pops to top */
+.grid-stack-item.subgrid-is-dragging {
+  z-index: 2147483647 !important;
+}
+
+/* Ensure the main grid doesn't clip */
+.grid-stack {
+  z-index: 100;
 }
