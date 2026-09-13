@@ -786,7 +786,9 @@ export default function App() {
             acceptWidgets: true,
             dragOut: true,
             float: false,
-            disableResize: true
+            disableResize: true,
+            draggable: { appendTo: 'body', cancel: '.no-drag' },
+            draggable: { appendTo: 'body', cancel: '.no-drag' }
           });
           
           (subGrid as any)._autoColumn = true;
