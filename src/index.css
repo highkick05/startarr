@@ -76,5 +76,5 @@
 
 /* Ensure the main grid doesn't clip */
 .grid-stack {
-  z-index: 100;
+  /* removed z-index: 100 to prevent stacking context trapping */
 }
