@@ -431,7 +431,7 @@ export default function App() {
         setRecycleBin(prev => {
           if (prev.find(i => i.id === fullItem.id)) return prev;
           const updated = [...prev, fullItem];
-          fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_bin_json: JSON.stringify(updated) }) }).catch(console.error);
+          // Auto-saved by useEffect
           return updated;
         });
       }
@@ -487,6 +487,17 @@ export default function App() {
     };
   }, []);
 
+  
+  // Sync Recycle Bin safely with debouncing
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const timer = setTimeout(() => {
+      fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_bin_json: JSON.stringify(recycleBin) }) }).catch(console.error);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [recycleBin, dataLoaded]);
+
+
   // Update layout size in local storage
   useEffect(() => {
     localStorage.setItem('layoutSize', layoutSize);
@@ -529,7 +540,7 @@ export default function App() {
       disableResize: false,
       acceptWidgets: true,
       removable: '.recycle-bin-zone',
-      removeTimeout: 100,
+      removeTimeout: 0,
       draggable: {
         cancel: '.no-drag', appendTo: 'body'
       }
@@ -599,7 +610,7 @@ export default function App() {
               setRecycleBin(prev => {
                 if (prev.find(i => i.id === fullItem.id)) return prev;
                 const updated = [...prev, fullItem];
-                fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_bin_json: JSON.stringify(updated) }) }).catch(console.error);
+                // Auto-saved by useEffect
                 return updated;
               });
             }
@@ -777,7 +788,7 @@ export default function App() {
            if (i.children) refreshRegistry(i.children);
         });
       };
-      itemRegistry.current.clear();
+      // itemRegistry.current.clear(); removed to preserve detached items for the recycle bin
       refreshRegistry(updated);
 
       fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
@@ -896,7 +907,7 @@ export default function App() {
             dragOut: true,
             float: false,
             removable: '.recycle-bin-zone',
-            removeTimeout: 100,
+            removeTimeout: 0,
             disableResize: true,
             draggable: { appendTo: 'body', cancel: '.no-drag' }
           });
@@ -1205,7 +1216,7 @@ export default function App() {
             onClick={() => setIsRecycleBinModalOpen(true)}
             className="recycle-bin-zone fixed bottom-6 right-6 w-[88px] h-[88px] dynamic-ui-bg border-2 border-neutral-800/60 rounded-[1.25rem] shadow-2xl z-[200] flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-neutral-800/50 hover:border-neutral-600 hover:scale-105 active:scale-95 group"
           >
-            <img src="https://img.icons8.com/3d-fluency/94/trash.png" alt="Recycle Bin" className="w-10 h-10 mb-0.5 drop-shadow-md opacity-90 group-hover:opacity-100 group-hover:scale-110 transition-all" />
+            <img src="https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Wastebasket/3D/wastebasket_3d.png" alt="Recycle Bin" className="w-10 h-10 mb-0.5 drop-shadow-md opacity-90 group-hover:opacity-100 group-hover:scale-110 transition-all" />
             <span className="text-[11px] font-medium text-neutral-400 group-hover:text-neutral-300 tracking-wide">Recycle Bin</span>
             {recycleBin.length > 0 && (
               <div className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full h-6 min-w-6 px-1 flex items-center justify-center shadow-lg border-2 border-neutral-900 z-10">
@@ -1896,7 +1907,7 @@ export default function App() {
                             // Restore item
                             setRecycleBin(prev => {
                                const updated = prev.filter(i => i.id !== item.id);
-                               fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_bin_json: JSON.stringify(updated) }) }).catch(console.error);
+                               // Auto-saved by useEffect
                                return updated;
                             });
                             
@@ -1906,7 +1917,7 @@ export default function App() {
                                // Make sure it doesn't already exist
                                if (prev.find(i => i.id === item.id)) return prev;
                                const updated = [...prev, item];
-                               fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+                               // fetch removed to prevent race conditions with saveGridState which runs momentarily
                                return updated;
                             });
                             
@@ -1927,7 +1938,7 @@ export default function App() {
                             // Perm Delete
                             setRecycleBin(prev => {
                                const updated = prev.filter(i => i.id !== item.id);
-                               fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_bin_json: JSON.stringify(updated) }) }).catch(console.error);
+                               // Auto-saved by useEffect
                                return updated;
                             });
                           }}
@@ -1946,7 +1957,7 @@ export default function App() {
                 <button 
                   onClick={() => {
                     setRecycleBin([]);
-                    fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_bin_json: '[]' }) }).catch(console.error);
+                    // Auto-saved by useEffect
                   }}
                   className="px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
                 >
