@@ -58,6 +58,12 @@ export async function getDb() {
   } catch (e) {
     // Column already exists
   }
+  try {
+    await dbInstance.execute("ALTER TABLE settings ADD COLUMN show_recycle_bin INTEGER DEFAULT 1;");
+  } catch (e) {}
+  try {
+    await dbInstance.execute("ALTER TABLE settings ADD COLUMN recycle_bin_json TEXT DEFAULT '[]';");
+  } catch (e) {}
   // add helper methods to mimic the old sqlite/sqlite3 api for easy migration in server.ts
   dbInstance.run = async (sql: string, args: any[] = []) => {
     const res = await dbInstance.execute({ sql, args });

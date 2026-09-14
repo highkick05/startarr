@@ -22,6 +22,12 @@ export default function App() {
         if (settings.active_background) setActiveBackground(settings.active_background);
         if (settings.tint_color) setTintColor(settings.tint_color);
         if (settings.tint_opacity !== null) setTintOpacity(settings.tint_opacity);
+        if (settings.show_recycle_bin !== undefined) setShowRecycleBin(!!settings.show_recycle_bin);
+        if (settings.recycle_bin_json) {
+           try {
+             setRecycleBin(JSON.parse(settings.recycle_bin_json));
+           } catch(e) {}
+        }
       }
       if (settings && settings.shortcuts_json) {
         try {
@@ -188,9 +194,9 @@ export default function App() {
       }
     }
     return [
-      { id: '1', title: 'Google', url: 'https://google.com', x: 0, y: 0, w: 1, h: 1, type: 'app' },
-      { id: '2', title: 'GitHub', url: 'https://github.com', x: 1, y: 0, w: 1, h: 1, type: 'app' },
-      { id: '3', title: 'YouTube', url: 'https://youtube.com', x: 2, y: 0, w: 1, h: 1, type: 'app' }
+      { id: '1', title: 'Google', url: 'https://google.com', x: 0, y: 0, w: 1, h: 8, type: 'app' },
+      { id: '2', title: 'GitHub', url: 'https://github.com', x: 1, y: 0, w: 1, h: 8, type: 'app' },
+      { id: '3', title: 'YouTube', url: 'https://youtube.com', x: 2, y: 0, w: 1, h: 8, type: 'app' }
     ];
   });
 
@@ -237,6 +243,10 @@ export default function App() {
 
   const currentCols = useRef(getColumns(layoutSize));
   const gridKey = useRef(0); // Used to force-remount grid when layout size changes
+
+  const [showRecycleBin, setShowRecycleBin] = useState(false);
+  const [recycleBin, setRecycleBin] = useState<ShortcutItem[]>([]);
+  const [isRecycleBinModalOpen, setIsRecycleBinModalOpen] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{title: string, url: string}[]>([]);
@@ -407,6 +417,25 @@ export default function App() {
 
     const handleRemove = (e: any) => {
       const id = e.detail.id;
+      
+      // Lookup for recycle bin
+      const findD = (arr: any[], tid: string): any => {
+        for (const i of arr) {
+          if (i.id === tid) return i;
+          if (i.children) { const f = findD(i.children, tid); if (f) return f; }
+        }
+        return null;
+      };
+      const fullItem = findD(shortcuts, id) || findD(JSON.parse(localStorage.getItem('shortcuts') || '[]'), id);
+      if (fullItem) {
+        setRecycleBin(prev => {
+          if (prev.find(i => i.id === fullItem.id)) return prev;
+          const updated = [...prev, fullItem];
+          fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_bin_json: JSON.stringify(updated) }) }).catch(console.error);
+          return updated;
+        });
+      }
+
       if (gridInstance.current) {
         const el = document.querySelector(`[gs-id="${id}"]`);
         if (el) {
@@ -499,6 +528,8 @@ export default function App() {
       animate: true,
       disableResize: false,
       acceptWidgets: true,
+      removable: '.recycle-bin-zone',
+      removeTimeout: 100,
       draggable: {
         cancel: '.no-drag', appendTo: 'body'
       }
@@ -547,9 +578,40 @@ export default function App() {
       saveGridState();
     };
     
+    const handleRemovedEvent = (e: any, items: any[]) => {
+      if (items) {
+        items.forEach(node => {
+          const rawId = node.id || node.el?.getAttribute('gs-id');
+          if (rawId) {
+            let fullItem = itemRegistry.current.get(rawId);
+            if (!fullItem) {
+               // try searching in localStorage if not in registry
+               const findD = (arr: any[], id: string): any => {
+                 for (const i of arr) {
+                   if (i.id === id) return i;
+                   if (i.children) { const f = findD(i.children, id); if (f) return f; }
+                 }
+                 return null;
+               };
+               fullItem = findD(JSON.parse(localStorage.getItem('shortcuts') || '[]'), rawId);
+            }
+            if (fullItem) {
+              setRecycleBin(prev => {
+                if (prev.find(i => i.id === fullItem.id)) return prev;
+                const updated = [...prev, fullItem];
+                fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_bin_json: JSON.stringify(updated) }) }).catch(console.error);
+                return updated;
+              });
+            }
+          }
+        });
+      }
+      handleGridChange(e, items);
+    };
+
     gridInstance.current.on('change', (e, items) => { handleGridChange(e, items); });
     gridInstance.current.on('added', handleGridChange);
-    gridInstance.current.on('removed', handleGridChange);
+    gridInstance.current.on('removed', handleRemovedEvent);
 
     const handleResize = () => {
       allowSave.current = false;
@@ -821,6 +883,8 @@ export default function App() {
             acceptWidgets: true,
             dragOut: true,
             float: false,
+            removable: '.recycle-bin-zone',
+            removeTimeout: 100,
             disableResize: true,
             draggable: { appendTo: 'body', cancel: '.no-drag' }
           });
@@ -871,7 +935,13 @@ export default function App() {
               }
             }
           });
-          subGrid.on('added removed', () => updateMinSize());
+          subGrid.on('added', () => updateMinSize());
+          subGrid.on('removed', (e, items) => {
+             updateMinSize();
+             if (items) {
+               handleRemovedEvent(e, items);
+             }
+          });
           subGrid.on('change', () => updateMinSize());
           
           subGrid.on('change', (e, items) => {
@@ -983,7 +1053,7 @@ export default function App() {
           title: fallbackDomain,
           url: formattedUrl,
           iconUrl: horseIcon,
-          w: 1, h: 1
+          w: 1, h: 8
         };
 
         // Instantly add it
@@ -1030,6 +1100,9 @@ export default function App() {
           background-color: rgba(0, 0, 0, ${(uiOpacity / 100) * 0.3}) !important;
           backdrop-filter: blur(${uiBlur}px) !important;
           -webkit-backdrop-filter: blur(${uiBlur}px) !important;
+        }
+        .grid-stack-item.ui-draggable-dragging, .grid-stack-item.grid-stack-item-dragging {
+          z-index: 99999 !important;
         }
       `}</style>
 
@@ -1084,40 +1157,51 @@ export default function App() {
             <span>{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             <span className="text-neutral-500">•</span>
             <span>{currentTime.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+            
+            <div className="w-px h-4 bg-neutral-600/50 ml-1 mr-1"></div>
+            
+            {user && (
+              <div className="flex items-center gap-2 mr-1">
+                <span className="text-xs font-medium text-neutral-300">{user.username}</span>
+                <button 
+                  onClick={logout} 
+                  className="text-neutral-400 hover:text-red-400 transition-colors p-1 rounded-md hover:bg-neutral-800/50" 
+                  title="Sign Out"
+                >
+                  <LogOut size={14} />
+                </button>
+              </div>
+            )}
+            <button 
+              onClick={() => setIsSettingsOpen(true)}
+              className="text-neutral-400 hover:text-white transition-colors p-1 rounded-md hover:bg-neutral-800/50 pointer-events-auto shrink-0"
+              title="Settings"
+            >
+              <Settings size={16} />
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Settings floating button & User controls (bottom right) */}
-      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3">
-        {user && (
-          <div className="flex items-center gap-3 bg-neutral-900 border border-neutral-800 rounded-2xl px-4 h-12 shadow-xl">
-            <div className="flex items-center gap-2">
-              <User size={16} className="text-neutral-500" />
-              <span className="text-sm font-medium text-neutral-300">{user.username}</span>
-            </div>
-            <div className="w-px h-4 bg-neutral-800"></div>
-            <button 
-              onClick={logout} 
-              className="text-neutral-500 hover:text-red-400 transition-colors" 
-              title="Sign Out"
-            >
-              <LogOut size={16} />
-            </button>
-          </div>
-        )}
-        <button 
-          onClick={() => setIsSettingsOpen(true)}
-          className="w-12 h-12 rounded-2xl bg-neutral-900 border border-neutral-800 flex items-center justify-center text-neutral-400 shadow-xl hover:bg-neutral-800 hover:text-white transition-all transform hover:scale-105 active:scale-95 pointer-events-auto shrink-0"
-          title="Settings"
-        >
-          <Settings size={22} />
-        </button>
-      </div>
-
       {/* Main Content */}
       <main className="w-full mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-28 min-h-screen relative z-10">
         <div className="grid-stack" ref={gridContainerRef}></div>
+
+        {/* Recycle Bin Drop Zone / Button */}
+        {showRecycleBin && (
+          <div 
+            onClick={() => setIsRecycleBinModalOpen(true)}
+            className="recycle-bin-zone fixed bottom-6 right-6 w-[88px] h-[88px] dynamic-ui-bg border-2 border-neutral-800/60 rounded-[1.25rem] shadow-2xl z-10 flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-neutral-800/50 hover:border-neutral-600 hover:scale-105 active:scale-95 group"
+          >
+            <img src="https://img.icons8.com/3d-fluency/94/trash.png" alt="Recycle Bin" className="w-10 h-10 mb-0.5 drop-shadow-md opacity-90 group-hover:opacity-100 group-hover:scale-110 transition-all" />
+            <span className="text-[11px] font-medium text-neutral-400 group-hover:text-neutral-300 tracking-wide">Recycle Bin</span>
+            {recycleBin.length > 0 && (
+              <div className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full h-6 min-w-6 px-1 flex items-center justify-center shadow-lg border-2 border-neutral-900 z-10">
+                {recycleBin.length}
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       {/* Bottom Floating Bar */}
@@ -1185,7 +1269,7 @@ export default function App() {
                           title: fallbackDomain,
                           url: formattedUrl,
                           iconUrl: horseIcon,
-                          w: 1, h: 1
+                          w: 1, h: 8
                         };
 
                         // Instantly add it
@@ -1361,6 +1445,23 @@ export default function App() {
           
           
           {/* Background Settings */}
+          <section className="border-t border-neutral-800 pt-6">
+            <h3 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider mb-4">Features</h3>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-neutral-300">Show Recycle Bin</span>
+              <button
+                onClick={() => {
+                  const val = !showRecycleBin;
+                  setShowRecycleBin(val);
+                  fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ show_recycle_bin: val }) }).catch(console.error);
+                }}
+                className={`w-11 h-6 rounded-full transition-colors relative ${showRecycleBin ? 'bg-blue-500' : 'bg-neutral-700'}`}
+              >
+                <div className={`absolute top-1 bottom-1 w-4 bg-white rounded-full transition-transform ${showRecycleBin ? 'translate-x-6' : 'translate-x-1'}`}></div>
+              </button>
+            </div>
+          </section>
+
           <section className="border-t border-neutral-800 pt-6">
             <h3 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider mb-4">Background & Theme</h3>
             
@@ -1741,6 +1842,106 @@ export default function App() {
               <span className="font-bold text-lg">Adding Shortcut</span>
               <span className="text-neutral-400 text-sm">Discovering site icons and metadata...</span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {isRecycleBinModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsRecycleBinModalOpen(false)}></div>
+          <div className="relative bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
+            <div className="flex justify-between items-center p-5 border-b border-neutral-800 bg-neutral-900/50 backdrop-blur shrink-0">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <Trash2 size={20} className="text-neutral-400" />
+                Recycle Bin
+              </h2>
+              <button onClick={() => setIsRecycleBinModalOpen(false)} className="text-neutral-400 hover:text-white p-1 rounded-lg hover:bg-neutral-800 transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1 bg-neutral-950/50">
+              {recycleBin.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-48 text-neutral-500 space-y-3">
+                  <Trash size={48} className="opacity-20" />
+                  <p>Recycle Bin is empty</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {recycleBin.map((item, idx) => (
+                    <div key={item.id + idx} className="flex items-center justify-between p-3 bg-neutral-900 border border-neutral-800 rounded-xl hover:border-neutral-700 transition-colors">
+                      <div className="flex items-center space-x-3 overflow-hidden">
+                         <div className="w-10 h-10 shrink-0 bg-neutral-800 rounded-lg flex items-center justify-center">
+                            {item.iconUrl ? <img src={item.iconUrl} className="w-6 h-6 object-contain" /> : <LayoutGrid size={16} className="text-neutral-400" />}
+                         </div>
+                         <div className="overflow-hidden">
+                           <p className="text-sm font-medium text-white truncate">{item.title}</p>
+                           <p className="text-xs text-neutral-500 uppercase">{item.type}</p>
+                         </div>
+                      </div>
+                      <div className="flex space-x-2 shrink-0 ml-2">
+                        <button 
+                          onClick={() => {
+                            // Restore item
+                            setRecycleBin(prev => {
+                               const updated = prev.filter(i => i.id !== item.id);
+                               fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_bin_json: JSON.stringify(updated) }) }).catch(console.error);
+                               return updated;
+                            });
+                            
+                            // It will need to be re-added to the shortcuts state, and rendered by grid stack!
+                            // Note: We use addWidgetToGrid for smooth entry!
+                            setShortcuts(prev => {
+                               // Make sure it doesn't already exist
+                               if (prev.find(i => i.id === item.id)) return prev;
+                               const updated = [...prev, item];
+                               fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+                               return updated;
+                            });
+                            
+                            // Inject into GridStack natively so it appears seamlessly!
+                            setTimeout(() => {
+                               if (gridInstance.current) {
+                                  addWidgetToGrid(item);
+                                  setTimeout(() => saveGridState(), 100);
+                               }
+                            }, 10);
+                          }}
+                          className="px-3 py-1.5 text-xs font-medium bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
+                        >
+                          Restore
+                        </button>
+                        <button 
+                          onClick={() => {
+                            // Perm Delete
+                            setRecycleBin(prev => {
+                               const updated = prev.filter(i => i.id !== item.id);
+                               fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_bin_json: JSON.stringify(updated) }) }).catch(console.error);
+                               return updated;
+                            });
+                          }}
+                          className="p-1.5 text-neutral-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {recycleBin.length > 0 && (
+              <div className="p-4 border-t border-neutral-800 bg-neutral-900/50 backdrop-blur flex justify-end">
+                <button 
+                  onClick={() => {
+                    setRecycleBin([]);
+                    fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_bin_json: '[]' }) }).catch(console.error);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                >
+                  Empty Recycle Bin
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

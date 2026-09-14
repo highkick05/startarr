@@ -137,7 +137,7 @@ app.get("/api/settings", requireAuth, async (req: any, res) => {
 
 app.put("/api/settings", requireAuth, async (req: any, res) => {
   
-  const { active_background, tint_color, tint_opacity, ui_opacity, ui_blur, layout_size, shortcuts_json } = req.body;
+  const { active_background, tint_color, tint_opacity, ui_opacity, ui_blur, layout_size, shortcuts_json, show_recycle_bin, recycle_bin_json } = req.body;
   const db = await getDb();
   
   // Update fields conditionally if they exist in req.body
@@ -152,6 +152,8 @@ app.put("/api/settings", requireAuth, async (req: any, res) => {
   if (ui_blur !== undefined) { updates.push("ui_blur = ?"); values.push(ui_blur); }
   if (layout_size !== undefined) { updates.push("layout_size = ?"); values.push(layout_size); }
   if (shortcuts_json !== undefined) { updates.push("shortcuts_json = ?"); values.push(shortcuts_json); }
+  if (show_recycle_bin !== undefined) { updates.push("show_recycle_bin = ?"); values.push(show_recycle_bin ? 1 : 0); }
+  if (recycle_bin_json !== undefined) { updates.push("recycle_bin_json = ?"); values.push(recycle_bin_json); }
   
   if (updates.length > 0) {
     values.push(req.userId);
