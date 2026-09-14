@@ -698,7 +698,7 @@ export default function App() {
         gridInstance.current.destroy(false);
       }
     };
-  }, [layoutSize, dataLoaded]); // Re-init grid when layoutSize changes or data finishes loading
+  }, [layoutSize, dataLoaded, showRecycleBin]); // Re-init grid when layoutSize changes, data finishes loading, or recycle bin toggles
 
   const saveGridState = () => {
 
@@ -1191,7 +1191,7 @@ export default function App() {
         {showRecycleBin && (
           <div 
             onClick={() => setIsRecycleBinModalOpen(true)}
-            className="recycle-bin-zone fixed bottom-6 right-6 w-[88px] h-[88px] dynamic-ui-bg border-2 border-neutral-800/60 rounded-[1.25rem] shadow-2xl z-10 flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-neutral-800/50 hover:border-neutral-600 hover:scale-105 active:scale-95 group"
+            className="recycle-bin-zone fixed bottom-6 right-6 w-[88px] h-[88px] dynamic-ui-bg border-2 border-neutral-800/60 rounded-[1.25rem] shadow-2xl z-[200] flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-neutral-800/50 hover:border-neutral-600 hover:scale-105 active:scale-95 group"
           >
             <img src="https://img.icons8.com/3d-fluency/94/trash.png" alt="Recycle Bin" className="w-10 h-10 mb-0.5 drop-shadow-md opacity-90 group-hover:opacity-100 group-hover:scale-110 transition-all" />
             <span className="text-[11px] font-medium text-neutral-400 group-hover:text-neutral-300 tracking-wide">Recycle Bin</span>
