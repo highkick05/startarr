@@ -107,7 +107,7 @@ export default function App() {
         });
       };
       const updated = updateDeep(prev);
-      fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
       return updated;
     });
     
@@ -300,9 +300,7 @@ export default function App() {
     localStorage.setItem('uiOpacity', String(uiOpacity));
     localStorage.setItem('uiBlur', String(uiBlur));
     if (dataLoaded) {
-      fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           active_background: activeBackground,
           tint_color: tintColor,
@@ -470,7 +468,7 @@ export default function App() {
               });
             };
             const updated = removeDeep(prev);
-            fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+            fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
             
             // Trigger a resize event to ensure layout recalculations (instead of full reload)
             setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
@@ -492,7 +490,7 @@ export default function App() {
   useEffect(() => {
     if (!dataLoaded) return;
     const timer = setTimeout(() => {
-      fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_bin_json: JSON.stringify(recycleBin) }) }).catch(console.error);
+      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_bin_json: JSON.stringify(recycleBin) }) }).catch(console.error);
     }, 500);
     return () => clearTimeout(timer);
   }, [recycleBin, dataLoaded]);
@@ -502,9 +500,7 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('layoutSize', layoutSize);
     if (dataLoaded) {
-      fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ layout_size: layoutSize })
       }).catch(console.error);
     }
@@ -772,13 +768,9 @@ export default function App() {
           ? childrenData.map(mapItem).filter(Boolean) as ShortcutItem[]
           : [];
 
+        const { el, subGrid, subGridOpts, content, ...restExisting } = existing as any;
         return {
-          id: existing.id,
-          type: existing.type,
-          title: existing.title,
-          url: existing.url,
-          iconUrl: existing.iconUrl,
-          
+          ...restExisting,
           x: item.x,
           y: item.y,
           w: item.w,
@@ -799,7 +791,7 @@ export default function App() {
       // itemRegistry.current.clear(); removed to preserve detached items for the recycle bin
       refreshRegistry(updated);
 
-      fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
       return updated;
     });
   };
@@ -1015,7 +1007,7 @@ export default function App() {
 
     setShortcuts(prev => {
       const updated = [...prev, newItem];
-      fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
       return updated;
     });
 
@@ -1040,7 +1032,7 @@ export default function App() {
     
     setShortcuts(prev => {
       const updated = [...prev, newItem];
-      fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
       return updated;
     });
 
@@ -1090,7 +1082,7 @@ export default function App() {
         // Instantly add it
         setShortcuts(prev => {
           const updated = [...prev, newItem];
-          fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+          fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
           return updated;
         });
         addWidgetToGrid(newItem);
@@ -1306,7 +1298,7 @@ export default function App() {
                         // Instantly add it
                         setShortcuts(prev => {
                           const updated = [...prev, newItem];
-                          fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+                          fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
                           return updated;
                         });
                         addWidgetToGrid(newItem);
@@ -1484,7 +1476,7 @@ export default function App() {
                 onClick={() => {
                   const val = !showRecycleBin;
                   setShowRecycleBin(val);
-                  fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ show_recycle_bin: val }) }).catch(console.error);
+                  fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ show_recycle_bin: val }) }).catch(console.error);
                 }}
                 className={`w-11 h-6 rounded-full transition-colors relative ${showRecycleBin ? 'bg-blue-500' : 'bg-neutral-700'}`}
               >
@@ -2055,7 +2047,7 @@ export default function App() {
                           });
                         };
                         const updated = updateRecursive(prev);
-                        fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+                        fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
                         return updated;
                       });
                       
