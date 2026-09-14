@@ -136,8 +136,13 @@ export default function App() {
           
           if (updates.iconUrl !== undefined || updates.url !== undefined || updates.title !== undefined) {
              imgEl.src = item.iconUrl || primaryIcon;
-             imgEl.setAttribute('onload', `if(this.naturalWidth < 64 && !this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.naturalWidth < 64 && this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; }`);
-             imgEl.setAttribute('onerror', `if(!this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; } else { this.onerror=null; }`);
+             if (item.iconUrl) {
+                imgEl.removeAttribute('onload');
+                imgEl.setAttribute('onerror', `this.onerror=null; this.src='${googleIcon}';`);
+             } else {
+                imgEl.setAttribute('onload', `if(this.naturalWidth < 64 && !this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.naturalWidth < 64 && this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; }`);
+                imgEl.setAttribute('onerror', `if(!this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; } else { this.onerror=null; }`);
+             }
              imgEl.dataset.fallback = '0';
           }
           if (updates.invertIcon !== undefined) {
@@ -352,7 +357,8 @@ export default function App() {
     x: number;
     y: number;
     shortcut: ShortcutItem | null;
-  }>({ visible: false, x: 0, y: 0, shortcut: null });
+    showQuickIcons?: boolean;
+}>({ visible: false, x: 0, y: 0, shortcut: null, showQuickIcons: false });
 
   
 
@@ -684,7 +690,8 @@ export default function App() {
                 visible: true,
                 x: Math.min(e.clientX, window.innerWidth - 200),
                 y: Math.min(e.clientY, window.innerHeight - 200),
-                shortcut: found
+                shortcut: found,
+                showQuickIcons: false
               });
             }
             return prev;
@@ -846,6 +853,11 @@ export default function App() {
       const googleIcon = domain ? `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128` : fallbackIcon;
       const primaryIcon = domain ? `https://icon.horse/icon/${domain}` : googleIcon;
       const iconUrl = item.iconUrl || primaryIcon;
+      
+      const onloadAttr = item.iconUrl ? '' : `onload="if(this.naturalWidth < 64 && !this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.naturalWidth < 64 && this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; }"`;
+      const onerrorAttr = item.iconUrl 
+        ? `onerror="this.onerror=null; this.src='${googleIcon}';"`
+        : `onerror="if(!this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; } else { this.onerror=null; }"`;
 
       htmlContent = `
         <div class="grid-stack-item-content relative group flex flex-col items-center justify-center cursor-grab active:cursor-grabbing transition-transform duration-300 hover:scale-105 hover:bg-neutral-800/30 rounded-2xl"
@@ -854,7 +866,7 @@ export default function App() {
           <div class="pointer-events-none w-full h-full flex flex-col items-center justify-between ${paddingClass}">
             <div class="flex-1 w-full min-h-0 flex items-center justify-center ${iconWrapperClass}">
               <div style="height: 100%; aspect-ratio: 1/1; ${item.iconBackground === 'white' ? 'background-color: white;' : item.iconBackground === 'black' ? 'background-color: black;' : ''}" class="flex items-center justify-center rounded-xl ${(item.iconBackground === 'white' || item.iconBackground === 'black') ? 'p-2' : ''} shadow-sm drop-shadow-md hover:drop-shadow-xl transition-all duration-300">
-                <img src="${iconUrl}"  onload="if(this.naturalWidth < 64 && !this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.naturalWidth < 64 && this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; }" onerror="if(!this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; } else { this.onerror=null; }" alt="${item.title}" draggable="false" style="width: 100%; height: 100%; object-fit: contain; ${item.invertIcon ? 'filter: invert(1);' : ''}" class="rounded-lg" />
+                <img src="${iconUrl}" ${onloadAttr} ${onerrorAttr} alt="${item.title}" draggable="false" style="width: 100%; height: 100%; object-fit: contain; ${item.invertIcon ? 'filter: invert(1);' : ''}" class="rounded-lg" />
               </div>
             </div>
             <span style="${titleStyle}" class="font-medium text-neutral-300 truncate w-full text-center px-0.5 ${textMarginClass} tracking-wide drop-shadow-sm opacity-90 group-hover:opacity-100 transition-opacity">
@@ -1773,21 +1785,34 @@ export default function App() {
                   
                   return (
                     <div className="flex flex-col space-y-1 mt-3">
-                       <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-0.5">Quick Icons</label>
-                       <div className="flex gap-2">
-                          {uniqueQuickIcons.map((ico, idx) => (
-                             <button 
-                                key={idx}
-                                onClick={() => {
-                                   updateShortcutDynamically(contextMenu.shortcut!.id, { iconUrl: ico });
-                                   setContextMenu(prev => ({ ...prev, shortcut: { ...prev.shortcut!, iconUrl: ico } }));
-                                }}
-                                className="w-8 h-8 rounded-lg bg-neutral-950/50 border border-neutral-800 hover:border-blue-500/50 overflow-hidden flex items-center justify-center transition-all p-1"
-                             >
-                                <img src={ico} className="w-full h-full object-contain rounded" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement!.style.display = 'none'; }} />
-                             </button>
-                          ))}
+                       <div className="flex items-center justify-between mb-0.5">
+                         <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">Quick Icons</label>
+                         {!contextMenu.showQuickIcons && (
+                           <button 
+                             onClick={() => setContextMenu(prev => ({ ...prev, showQuickIcons: true }))}
+                             className="text-[9px] text-blue-400 hover:text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded transition-colors"
+                           >
+                             Find Icons
+                           </button>
+                         )}
                        </div>
+                       
+                       {contextMenu.showQuickIcons && (
+                         <div className="flex gap-2 flex-wrap">
+                            {uniqueQuickIcons.map((ico, idx) => (
+                               <button 
+                                  key={idx}
+                                  onClick={() => {
+                                     updateShortcutDynamically(contextMenu.shortcut!.id, { iconUrl: ico });
+                                     setContextMenu(prev => ({ ...prev, shortcut: { ...prev.shortcut!, iconUrl: ico } }));
+                                  }}
+                                  className="w-8 h-8 rounded-lg bg-neutral-950/50 border border-neutral-800 hover:border-blue-500/50 overflow-hidden flex items-center justify-center transition-all p-1 shrink-0 mb-1"
+                               >
+                                  <img src={ico} className="w-full h-full object-contain rounded" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement!.style.display = 'none'; }} />
+                               </button>
+                            ))}
+                         </div>
+                       )}
                     </div>
                   );
                 })()}
