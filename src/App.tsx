@@ -768,7 +768,18 @@ export default function App() {
         };
       };
 
-      const updated = items.map(mapItem).filter(Boolean) as ShortcutItem[];
+    const updated = items.map(mapItem).filter(Boolean) as ShortcutItem[];
+      
+      // Keep itemRegistry up to date with the latest tree structure!
+      const refreshRegistry = (list: ShortcutItem[]) => {
+        list.forEach(i => {
+           itemRegistry.current.set(i.id, { ...i });
+           if (i.children) refreshRegistry(i.children);
+        });
+      };
+      itemRegistry.current.clear();
+      refreshRegistry(updated);
+
       fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
       return updated;
     });
@@ -858,9 +869,10 @@ export default function App() {
     if (item.x !== undefined) opts.x = item.x;
     if (item.y !== undefined) opts.y = item.y;
 
-            // Create DOM element manually
+    // Create DOM element manually
     const wrapper = document.createElement('div');
     wrapper.className = 'grid-stack-item';
+    wrapper.setAttribute('gs-id', item.id); // Explicitly bind ID for context menu!
     wrapper.innerHTML = htmlContent;
     
     // Append to grid container directly
