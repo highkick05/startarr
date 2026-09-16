@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { GridStack } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
-import { Plus, X, Link2, Loader2, LayoutGrid, Search, Globe, Settings, Trash2, Image as ImageIcon, Video as VideoIcon, Upload, Trash, LogOut, User, ArrowRight } from 'lucide-react';
+import { ShipWheel, Plus, X, Link2, Loader2, LayoutGrid, Search, Globe, Settings, Trash2, Image as ImageIcon, Video as VideoIcon, Upload, Trash, LogOut, User, ArrowRight } from 'lucide-react';
 import { ShortcutItem } from './types';
 import { AuthContext } from './Auth.tsx';
 import { popularApps } from './data';
@@ -1185,8 +1185,12 @@ export default function App() {
       {/* Header */}
       <header className="absolute top-0 left-0 w-full z-30 py-2.5 px-4 sm:px-6 pointer-events-none flex justify-between dynamic-header-bg border-b border-white/10">
         <div className="w-full mx-auto flex items-center justify-between">
-          <div className="flex items-center pointer-events-auto">
-            <span className="font-semibold text-lg tracking-tight">starterr</span>
+          <div className="flex items-center pointer-events-auto group cursor-default">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center mr-2.5 shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-transform duration-300 relative overflow-hidden">
+              <div className="absolute inset-0 bg-white/20 rotate-45 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
+              <ShipWheel size={18} className="text-white drop-shadow-md" />
+            </div>
+            <span className="font-bold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60 drop-shadow-sm">startarr</span>
           </div>
           <div className="flex items-center space-x-3 pointer-events-auto text-sm font-medium text-neutral-200">
             <span>{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -1469,7 +1473,7 @@ export default function App() {
         <div className="p-6 border-b border-neutral-800 flex justify-between items-center bg-neutral-900/50 backdrop-blur sticky top-0 z-10 shrink-0">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <Settings size={20} className="text-neutral-400" />
-            starterr Settings
+            startarr Settings
           </h2>
           <button onClick={() => setIsSettingsOpen(false)} className="text-neutral-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-neutral-800">
              <X size={24} />
