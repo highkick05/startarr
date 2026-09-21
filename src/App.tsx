@@ -8,6 +8,31 @@ import { popularApps } from './data';
 
 type LayoutSize = 'small' | 'medium' | 'large';
 
+const DEFAULT_CATEGORIES: string[] = [
+  "3D & Animation", "AI Tools", "Airlines", "Analytics", "Antiques", "APIs & Microservices",
+  "Art Supplies", "Audiobooks", "Automotive", "Aviation", "Banking", "Beauty & Fashion",
+  "Bicycles", "Big Data", "Board Games", "Boating & Sailing", "Breweries & Wineries",
+  "Car Rentals", "Cars & Trucks", "CI/CD", "Cloud Services", "Coffee & Tea", "Collaboration",
+  "Collectibles", "Comics & Anime", "Communication", "Concerts", "Cosmetics", "CRM",
+  "Crypto & Web3", "Data Science", "Databases", "Dating", "Deals & Coupons", "Delivery",
+  "Design", "Development", "DevOps", "DIY & Crafts", "Education", "Entertainment",
+  "Environment", "Esports", "Events & Ticketing", "Extreme Sports", "Family & Kids",
+  "Farming & Agriculture", "Fashion & Apparel", "Festivals", "Finance", "Fitness & Health",
+  "Fitness Equipment", "Food & Drink", "Freelance", "Game Dev", "Games", "Government",
+  "Groceries", "Haircare", "Hardware", "History", "Home Improvement", "Hosting", "Hotels",
+  "HR", "Hunting & Fishing", "Investing", "IoT", "Jewelry", "Job Search", "Language Learning",
+  "Legal", "Lifestyle", "Local News", "Machine Learning", "Maps & Navigation", "Marketing",
+  "Martial Arts", "Meal Kits", "Mobile Dev", "Motorcycles", "Museums & Arts", "Music & Audio",
+  "Musical Instruments", "Networking", "News & Media", "Nightlife", "Non-profit",
+  "Online Courses", "OS & Systems", "Outdoors", "Personal Finance", "Pets", "Philosophy",
+  "Photography", "Podcasts", "Politics", "Productivity", "Public Transit", "Reading",
+  "Real Estate", "Religion & Spirituality", "Research", "Restaurants", "Robotics",
+  "RVs & Camping", "Security", "Shopping", "Skincare", "Smart Home", "Social", "Software",
+  "Space & Science", "Sports", "Streaming", "Sustainability", "Team Sports", "Testing & QA",
+  "Theater", "Travel", "Travel Planning", "Utilities", "Video Editing", "Video Meetings",
+  "Volunteering", "VR & AR", "Weather", "Work", "Writing", "Yoga & Pilates"
+];
+
 export default function App() {
   const { user, logout } = React.useContext(AuthContext);
   const [dataLoaded, setDataLoaded] = useState(false);
@@ -1691,7 +1716,7 @@ export default function App() {
             <div>
                <h4 className="text-xs font-semibold text-neutral-500 mb-3 uppercase tracking-wider">Default Categories</h4>
                <div className="flex flex-wrap gap-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
-                  {["Work","Social","Entertainment","Finance","AI Tools","Development","Games","Shopping","Productivity","News & Media","Travel","Utilities","Lifestyle","Crypto & Web3","Design","Marketing","Research","Education","Fitness & Health","Streaming","Music & Audio","Reading","Writing","Hosting","Databases","Security","Legal","Real Estate","Food & Drink","Delivery","Cloud Services","Analytics","CRM","HR","Collaboration","Communication","Video Meetings","Smart Home","Automotive","Photography","Video Editing","3D & Animation","Job Search","Freelance","Dating","Family & Kids","Pets","Deals & Coupons","Beauty & Fashion","Sports","Outdoors","DIY & Crafts","Home Improvement","Personal Finance","Investing","Banking","Language Learning","Online Courses","Podcasts","Audiobooks","Comics & Anime","Esports","Board Games","VR & AR","Hardware","Software","OS & Systems","Networking","DevOps","CI/CD","Testing & QA","APIs & Microservices","Mobile Dev","Game Dev","Data Science","Machine Learning","Big Data","IoT","Robotics","Space & Science","History","Philosophy","Religion & Spirituality","Politics","Government","Non-profit","Volunteering","Environment","Sustainability","Travel Planning","Airlines","Hotels","Car Rentals","Public Transit","Maps & Navigation","Weather","Local News","Events & Ticketing","Museums & Arts","Theater","Concerts","Festivals","Nightlife","Restaurants","Coffee & Tea","Breweries & Wineries","Groceries","Meal Kits","Farming & Agriculture","Fashion & Apparel","Jewelry","Cosmetics","Skincare","Haircare","Fitness Equipment","Yoga & Pilates","Martial Arts","Team Sports","Extreme Sports","Hunting & Fishing","Boating & Sailing","Aviation","Motorcycles","Bicycles","Cars & Trucks","RVs & Camping","Collectibles","Antiques","Art Supplies","Musical Instruments"].map(cat => (
+                  {DEFAULT_CATEGORIES.map(cat => (
                     <button 
                       key={cat}
                       onClick={() => addContainerToGrid(cat)}
