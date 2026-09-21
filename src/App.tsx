@@ -336,7 +336,7 @@ export default function App() {
 
   const [currentTime, setCurrentTime] = useState(new Date());
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -466,12 +466,22 @@ export default function App() {
   }, [searchQuery, filteredApps.length]);
 
 
-  // Track mouse position to reveal bottom bar
+  // Track mouse position to reveal bottom bar and right edge settings
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       const threshold = 120; // Show when within 120px of bottom
       const nearBottom = (window.innerHeight - e.clientY) <= threshold;
       setIsMouseNearBottom(nearBottom);
+
+      // Slide out settings when dragging or moving mouse to far right of screen
+      const rightThreshold = 25; // within 25px of right edge
+      const nearRight = (window.innerWidth - e.clientX) <= rightThreshold;
+      if (nearRight) {
+        const isDragging = document.querySelector('.grid-stack-item-dragging, .ui-draggable-dragging');
+        if (!isDragging) {
+          setIsSettingsOpen(true);
+        }
+      }
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -1255,44 +1265,26 @@ export default function App() {
       <div className={`absolute inset-0 z-[-1] ${activeBackground && activeBackground !== 'none' ? '' : 'bg-neutral-950'}`} />
 
       
-      {/* Header */}
-      <header className="absolute top-0 left-0 w-full z-30 py-2.5 px-4 sm:px-6 pointer-events-none flex justify-between dynamic-header-bg border-b border-white/10">
-        <div className="w-full mx-auto flex items-center justify-between">
-          <div className="flex items-center pointer-events-auto">
-            <StartarrLogo size="md" />
-          </div>
-          <div className="flex items-center space-x-3 pointer-events-auto text-sm font-medium text-neutral-200">
-            <span>{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            <span className="text-neutral-500">•</span>
-            <span>{currentTime.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-            
-            <div className="w-px h-4 bg-neutral-600/50 ml-1 mr-1"></div>
-            
-            {user && (
-              <div className="flex items-center gap-2 mr-1">
-                <span className="text-xs font-medium text-neutral-300">{user.username}</span>
-                <button 
-                  onClick={logout} 
-                  className="text-neutral-400 hover:text-red-400 transition-colors p-1 rounded-md hover:bg-neutral-800/50" 
-                  title="Sign Out"
-                >
-                  <LogOut size={14} />
-                </button>
-              </div>
-            )}
-            <button 
-              onClick={() => setIsSettingsOpen(true)}
-              className="text-neutral-400 hover:text-white transition-colors p-1 rounded-md hover:bg-neutral-800/50 pointer-events-auto shrink-0"
-              title="Settings"
-            >
-              <Settings size={16} />
-            </button>
-          </div>
-        </div>
-      </header>
+      {/* Floating 12-hour Time & Date in top right */}
+      <div className="absolute top-3.5 right-6 z-30 pointer-events-none flex items-center space-x-2.5 text-sm font-medium text-neutral-200/90 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] select-none">
+        <span>{currentTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+        <span className="text-neutral-400 opacity-60">•</span>
+        <span>{currentTime.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+      </div>
 
-      {/* Main Content */}
-      <main className="w-full mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-28 min-h-screen relative z-10">
+      {/* Right Edge Trigger Sensor for sliding out Settings on drag/hover */}
+      <div 
+        className="fixed top-0 right-0 w-3 h-full z-30 pointer-events-auto"
+        onMouseEnter={() => {
+          const isDragging = document.querySelector('.grid-stack-item-dragging, .ui-draggable-dragging');
+          if (!isDragging) {
+            setIsSettingsOpen(true);
+          }
+        }}
+      />
+
+      {/* Main Content (slid up to top now that header bar is removed) */}
+      <main className="w-full mx-auto px-4 sm:px-6 lg:px-8 pt-3 sm:pt-4 pb-28 min-h-screen relative z-10">
         <div className="grid-stack" ref={gridContainerRef}></div>
 
         {/* Recycle Bin Drop Zone / Button */}
@@ -1322,28 +1314,35 @@ export default function App() {
           
           {/* Smart Input Bar */}
           <div className="relative group">
-            <div className="absolute inset-0 bg-blue-500/10 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div className="absolute inset-0 bg-emerald-500/10 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
             <div 
-              className={`relative flex items-center bg-neutral-900 border transition-colors duration-300 shadow-2xl overflow-visible ${
-                isInputFocused ? 'border-blue-500/50 ring-1 ring-blue-500/50 rounded-b-3xl rounded-t-lg' : 'border-neutral-800 hover:border-neutral-700 rounded-full'
+              className={`relative flex items-center bg-neutral-900/90 backdrop-blur-md border transition-all duration-300 shadow-2xl overflow-visible ${
+                isInputFocused ? 'border-emerald-500/50 ring-1 ring-emerald-500/30 rounded-b-3xl rounded-t-lg' : 'border-neutral-800 hover:border-neutral-700 rounded-full'
               }`}
             >
-              <div className="pl-5 pr-3 text-neutral-400">
+              <div className="pl-5 pr-3 text-neutral-400 shrink-0">
                 <Search size={20} />
               </div>
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => setIsInputFocused(true)}
-                onBlur={() => {
-                   setIsInputFocused(false);
-                }}
-                onKeyDown={handleKeyDown}
-                placeholder="Type an app name or URL..."
-                className="w-full bg-transparent border-none outline-none py-4 text-neutral-200 placeholder:text-neutral-600 focus:ring-0"
-              />
+              <div className="relative flex-1 flex items-center min-w-0 pr-4">
+                {!searchQuery && (
+                  <div className="absolute inset-y-0 left-0 flex items-center pointer-events-none select-none">
+                    <StartarrLogo size="sm" className="mr-3 shrink-0" />
+                    <span className="text-neutral-500 text-sm truncate hidden sm:inline">Type an app name or URL...</span>
+                  </div>
+                )}
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setIsInputFocused(true)}
+                  onBlur={() => {
+                     setIsInputFocused(false);
+                  }}
+                  onKeyDown={handleKeyDown}
+                  className="w-full bg-transparent border-none outline-none py-4 text-neutral-200 focus:ring-0 text-base z-10"
+                />
+              </div>
               {searchQuery && (
                 <div className="flex items-center pr-2 gap-1">
                   <button 
@@ -1751,9 +1750,40 @@ export default function App() {
           </section>
 
         </div>
+
+        {/* Settings Footer with User info & Logout */}
+        <div className="p-4 border-t border-neutral-800 bg-neutral-900/95 backdrop-blur shrink-0 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-neutral-800 border border-neutral-700/80 flex items-center justify-center text-neutral-300 font-semibold text-xs shrink-0 shadow-inner">
+              {user?.username ? user.username.charAt(0).toUpperCase() : <User size={14} />}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-neutral-200 truncate">{user?.username || 'User'}</p>
+              <p className="text-[10px] text-neutral-500">Signed in</p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              setIsSettingsOpen(false);
+              logout();
+            }}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/30 text-xs font-semibold transition-all duration-200 active:scale-95 shadow-sm shrink-0"
+            title="Sign Out"
+          >
+            <LogOut size={14} />
+            <span>Sign Out</span>
+          </button>
+        </div>
       </div>
       
-      {/* Backdrop for side panel */}
+      {/* Backdrop for Settings side panel */}
+      {isSettingsOpen && (
+        <div 
+          onClick={() => setIsSettingsOpen(false)}
+          className="fixed inset-0 bg-black/40 backdrop-blur-xs z-40 transition-opacity duration-300"
+        />
+      )}
       
       {/* Context Menu */}
       {contextMenu.visible && contextMenu.shortcut && (
