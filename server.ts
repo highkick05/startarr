@@ -1,17 +1,17 @@
 import express from "express";
-async function getVerifiedWalkxcode(title) {
-  if (!title) return [];
-  const words = title.split(/[\s\|]+/).filter(w => w.length >= 2);
-  words.unshift(title); // Try full string first
+async function getVerifiedWalkxcode(title: string) {
+  if (!title || title.trim().length < 3) return [];
+  const words = title.split(/[\s\|]+/).filter(w => w.length >= 3);
+  words.unshift(title.trim()); // Try full string first
   
   // Build a list of potential sanitizations
-  const candidates = new Set();
+  const candidates = new Set<string>();
   
   for (const word of words) {
     const dashed = word.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     const squished = word.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (dashed) candidates.add(dashed);
-    if (squished) candidates.add(squished);
+    if (dashed && dashed.length >= 3) candidates.add(dashed);
+    if (squished && squished.length >= 3) candidates.add(squished);
   }
 
   for (const sanitized of candidates) {
@@ -166,6 +166,20 @@ app.put("/api/settings", requireAuth, async (req: any, res) => {
 
 
 let appDictionary: Record<string, string> = {
+    'facebook': 'Facebook',
+    'google': 'Google',
+    'github': 'GitHub',
+    'youtube': 'YouTube',
+    'twitter': 'Twitter',
+    'instagram': 'Instagram',
+    'reddit': 'Reddit',
+    'discord': 'Discord',
+    'twitch': 'Twitch',
+    'spotify': 'Spotify',
+    'netflix': 'Netflix',
+    'amazon': 'Amazon',
+    'linkedin': 'LinkedIn',
+    'coinbase': 'Coinbase',
     'adguard': 'AdGuard Home', 'adgaurd': 'AdGuard Home', 'pihole': 'Pi-hole', 'pi-hole': 'Pi-hole',
     'proxmox': 'Proxmox', 'truenas': 'TrueNAS', 'portainer': 'Portainer', 'jellyfin': 'Jellyfin',
     'sonarr': 'Sonarr', 'radarr': 'Radarr', 'lidarr': 'Lidarr', 'readarr': 'Readarr', 
@@ -192,6 +206,8 @@ fetch('https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/tree.j
       if (data.png && Array.isArray(data.png)) {
           data.png.forEach((icon: string) => {
               let name = icon.replace('.png', '').replace('-dark', '').replace('-light', '');
+              // STRICT: Exclude 1 and 2 letter icons to prevent false-positive dictionary matching
+              if (name.length < 3) return;
               if (!appDictionary[name] && !appDictionary[name.replace(/-/g, '')]) {
                   let formatted = name.split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
                   appDictionary[name] = formatted;
@@ -232,57 +248,72 @@ function decodeHTMLEntities(text: string) {
 function getBetterTitle(title: string, urlString: string) {
     let finalTitle = decodeHTMLEntities((title || '').trim());
     
-    // Strip common prefixes/suffixes
-    const noiseRegex = /^(sign\s?in|log\s?in|welcome( to)?)\s*[-|:]?\s*|\s*[-|:]?\s*(sign\s?in|log\s?in|dashboard|home|welcome)$/gi;
-    finalTitle = finalTitle.replace(noiseRegex, '').trim();
+    // Clean common separator patterns like "Facebook – log in or sign up", "GitHub: Let's build from here"
+    if (finalTitle) {
+      const sepMatch = finalTitle.match(/^([A-Za-z0-9\s]{3,30}?)\s*[-|–|—|:•·]\s*(log\s?in|sign\s?in|welcome|home|dashboard|the|let's|let’s|where|dive|watch|official|buy)/i);
+      if (sepMatch && sepMatch[1]) {
+        finalTitle = sepMatch[1].trim();
+      } else {
+        const noiseRegex = /^(sign\s?in|log\s?in|welcome( to)?)\s*[-|–|—|:]?\s*|\s*[-|–|—|:]?\s*(sign\s?in|log\s?in|dashboard|home|welcome)$/gi;
+        finalTitle = finalTitle.replace(noiseRegex, '').trim();
+      }
+    }
 
-    const genericTitles = ['login', 'home', 'dashboard', 'welcome', 'index', 'sign in'];
+    const genericTitles = ['login', 'home', 'dashboard', 'welcome', 'index', 'sign in', 'log in', 'error', '404', 'forbidden', 'access denied', 'blocked', 'robot check', 'security check', 'just a moment', 'c'];
     const lowerTitle = finalTitle.toLowerCase();
-    
     const isDomain = /^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(finalTitle);
     
     let hostname = '';
     try {
-        hostname = new URL(urlString).hostname.toLowerCase();
+        hostname = new URL(urlString.startsWith('http') ? urlString : 'https://' + urlString).hostname.toLowerCase();
     } catch(e) { /* ignore */ }
     
-    // ALWAYS check dictionary first based on hostname if available
-    let foundInDict = false;
+    const domainPart = hostname.replace(/^www\./, '').split('.')[0] || '';
+    const isTitleGeneric = !finalTitle || genericTitles.includes(lowerTitle) || finalTitle.includes('://') || isDomain || finalTitle.length < 3;
+
+    // Check dictionary matching on exact hostname segments ONLY (never arbitrary substring includes!)
     if (hostname) {
-        for (const [key, name] of Object.entries(appDictionary)) {
-            if (hostname.includes(key)) {
-                finalTitle = name;
-                foundInDict = true;
+        const hostParts = hostname.replace(/^www\./, '').split(/[\.:]/).filter(p => p.length >= 3 && !['com', 'org', 'net', 'io', 'app', 'local', 'lan', 'home', 'internal'].includes(p));
+        
+        let dictMatch: string | null = null;
+        for (const part of hostParts) {
+            if (appDictionary[part]) {
+                dictMatch = appDictionary[part];
                 break;
+            }
+            const clean = part.replace(/-/g, '');
+            if (appDictionary[clean]) {
+                dictMatch = appDictionary[clean];
+                break;
+            }
+        }
+
+        // If title was generic or empty, use the dictionary match or clean domain name
+        if (isTitleGeneric) {
+            if (dictMatch) {
+                finalTitle = dictMatch;
+            } else if (domainPart) {
+                finalTitle = domainPart.charAt(0).toUpperCase() + domainPart.slice(1);
             }
         }
     }
     
-    if (!foundInDict && (!finalTitle || genericTitles.includes(lowerTitle) || finalTitle.includes('://') || isDomain)) {
-        if (hostname) {
-           const parts = hostname.split('.');
-           if (parts.length > 0 && parts[0] !== 'www') {
-               finalTitle = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
-           } else if (parts.length > 1) {
-               finalTitle = parts[1].charAt(0).toUpperCase() + parts[1].slice(1);
-           }
-        }
-    }
-    return finalTitle;
+    return finalTitle || (domainPart ? domainPart.charAt(0).toUpperCase() + domainPart.slice(1) : '');
 }
 
 
 app.post("/api/scrape-metadata", async (req: any, res) => {
-  const { url } = req.body;
+  const { url, query } = req.body;
   try {
     let fetchUrl = url;
     if (!fetchUrl.startsWith('http')) fetchUrl = 'https://' + fetchUrl;
     
     const response = await fetch(fetchUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; startarr/1.0)' },
-      signal: AbortSignal.timeout(5000)
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+      signal: AbortSignal.timeout(6000)
     });
     const html = await response.text();
+    const baseUrl = new URL(response.url);
     
     let title = '';
     const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
@@ -295,65 +326,148 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
     // Improve App Name Heuristics for Homelab / Generic titles
     title = getBetterTitle(title, fetchUrl);
 
-    const icons = new Set();
-    const linkRegex = /<link[^>]+rel=["']?(?:shortcut icon|icon|apple-touch-icon)["']?[^>]*href=["']([^"']+)["']/gi;
+    const icons = new Set<string>();
+
+    // 1. Extract link tags: apple-touch-icon, icon, mask-icon, manifest
+    const linkRegex = /<link[^>]+rel=["']?(?:shortcut icon|icon|apple-touch-icon|mask-icon)["']?[^>]*href=["']([^"'>\s]+)["']/gi;
     let match;
     while ((match = linkRegex.exec(html)) !== null) {
-      icons.add(match[1]);
+      if (match[1] && !match[1].includes('&#')) icons.add(match[1]);
     }
     
-    const ogImageRegex = /<meta[^>]*property=["']?og:image["']?[^>]*content=["']([^"']+)["']/gi;
-    while ((match = ogImageRegex.exec(html)) !== null) {
-      icons.add(match[1]);
+    // 2. OpenGraph / Twitter Image (non-greedy within a single meta tag)
+    const ogImageRegex1 = /<meta\s+[^>]*?(?:property|name)=["'](?:og:image|twitter:image|twitter:image:src)["'][^>]*?content=["']([^"'>\s]+)["'][^>]*>/gi;
+    const ogImageRegex2 = /<meta\s+[^>]*?content=["']([^"'>\s]+)["'][^>]*?(?:property|name)=["'](?:og:image|twitter:image|twitter:image:src)["'][^>]*>/gi;
+    while ((match = ogImageRegex1.exec(html)) !== null) {
+      if (match[1] && !match[1].includes('&#')) icons.add(match[1]);
+    }
+    while ((match = ogImageRegex2.exec(html)) !== null) {
+      if (match[1] && !match[1].includes('&#')) icons.add(match[1]);
     }
 
-    const baseUrl = new URL(response.url);
+    // 3. Search site's HTML for logo/brand images and query matches
+    const imgRegex = /<img\s+[^>]*?src=["']([^"'>\s]+)["'][^>]*>/gi;
+    while ((match = imgRegex.exec(html)) !== null) {
+      const fullTag = match[0];
+      const src = match[1];
+      if (!src || src.startsWith('data:') || src.includes('&#')) continue;
+      const matchesSearch = query && query.trim() && new RegExp(query.trim(), 'i').test(fullTag);
+      const isLogoOrBrand = /logo|brand|icon|symbol|header-img|navbar-brand|site-logo/i.test(fullTag);
+      if (isLogoOrBrand || matchesSearch) {
+        icons.add(src);
+      }
+    }
+
+    // 4. Also check source tags inside picture or svg elements
+    const sourceRegex = /<source\s+[^>]*?srcset=["']([^"'>]+)["'][^>]*>/gi;
+    while ((match = sourceRegex.exec(html)) !== null) {
+      const rawSrc = match[1].split(',')[0].trim().split(' ')[0];
+      if (rawSrc && !rawSrc.includes('&#') && (/logo|brand|icon|symbol/i.test(match[0]) || (query && new RegExp(query.trim(), 'i').test(match[0])))) {
+        icons.add(rawSrc);
+      }
+    }
+
+    // Resolve relative paths to absolute URLs with strict validation
     const resolvedIcons = Array.from(icons).map(icon => {
       try {
-        return new URL(icon, baseUrl).href;
+        if (!icon || typeof icon !== 'string' || icon.length > 500) return null;
+        if (icon.includes(' ') || icon.includes('&#') || icon.includes('<') || icon.includes('>')) return null;
+        const u = new URL(icon, baseUrl);
+        if (!['http:', 'https:'].includes(u.protocol)) return null;
+        return u.href;
       } catch {
         return null;
       }
     }).filter(Boolean) as string[];
 
     // Filter out low-quality .ico files
-    const hdIcons = resolvedIcons.filter(icon => !icon.toLowerCase().endsWith('.ico') && !icon.toLowerCase().includes('favicon.ico'));
+    const hdIcons = resolvedIcons.filter(icon => 
+      !icon.toLowerCase().endsWith('.ico') && 
+      !icon.toLowerCase().includes('.ico?') && 
+      !icon.toLowerCase().includes('favicon.ico')
+    );
 
     // Google 128px high-res favicon
     hdIcons.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${baseUrl.origin}&size=128`);
 
+    // Clean slugs for repository search
     const finalTitle = getBetterTitle(title || '', baseUrl.href);
-    
-    if (finalTitle) {
-      const validWalkx = await getVerifiedWalkxcode(finalTitle);
+    const domainPart = baseUrl.hostname.replace(/^www\./, '').split('.')[0];
+    const searchSlug = query ? query.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+    const titleSlug = finalTitle ? finalTitle.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+    const domainSlug = domainPart ? domainPart.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+
+    const candidateSlugs = [...new Set([searchSlug, titleSlug, domainSlug].filter(s => s && s.length >= 3))];
+
+    for (const slug of candidateSlugs) {
+      const validWalkx = await getVerifiedWalkxcode(slug);
       if (validWalkx.length > 0) {
-        hdIcons.unshift(...validWalkx.reverse());
+        hdIcons.unshift(...validWalkx);
       }
-      const simpleSlug = finalTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (simpleSlug) {
-        hdIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${simpleSlug}.svg`);
-      }
+      hdIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${slug}.svg`);
+      hdIcons.push(`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${slug}.svg`);
     }
 
-    res.json({ title: finalTitle, icons: [...new Set(hdIcons)] });
+    // Check common high-res logo endpoints on the target domain
+    const commonPaths = [
+      '/logo.svg',
+      '/logo.png',
+      '/assets/logo.svg',
+      '/assets/logo.png',
+      '/images/logo.svg',
+      '/images/logo.png',
+      '/static/logo.svg'
+    ];
+    if (query && query.trim()) {
+      commonPaths.push(`/${query.trim().toLowerCase()}.svg`, `/${query.trim().toLowerCase()}.png`);
+    }
+
+    const probeResults = await Promise.allSettled(commonPaths.map(async p => {
+      try {
+        const full = new URL(p, baseUrl).href;
+        const res = await fetch(full, { method: 'HEAD', signal: AbortSignal.timeout(1500) });
+        if (res.ok) {
+          const type = res.headers.get('content-type') || '';
+          if (type.includes('image') || type.includes('svg')) {
+            return full;
+          }
+        }
+      } catch {}
+      return null;
+    }));
+
+    probeResults.forEach(r => {
+      if (r.status === 'fulfilled' && r.value) {
+        hdIcons.unshift(r.value);
+      }
+    });
+
+    res.json({ 
+      title: finalTitle, 
+      icons: [...new Set(hdIcons)],
+      siteUrl: baseUrl.href
+    });
   } catch (err) {
     try {
       const u = new URL(url.startsWith('http') ? url : 'https://' + url);
       const fallbackTitle = getBetterTitle('', u.href);
       const fallbackIcons: string[] = [];
-      if (fallbackTitle) {
-        const validWalkx = await getVerifiedWalkxcode(fallbackTitle);
+      const domainPart = u.hostname.replace(/^www\./, '').split('.')[0];
+      const searchSlug = query ? query.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+      const domainSlug = domainPart ? domainPart.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+
+      for (const slug of [...new Set([searchSlug, domainSlug].filter(s => s && s.length >= 3))]) {
+        const validWalkx = await getVerifiedWalkxcode(slug);
         fallbackIcons.push(...validWalkx);
-        const simpleSlug = fallbackTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
-        if (simpleSlug) {
-          fallbackIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${simpleSlug}.svg`);
-        }
+        fallbackIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${slug}.svg`);
+        fallbackIcons.push(`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${slug}.svg`);
       }
       fallbackIcons.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${u.origin}&size=128`);
       
       res.json({
         title: fallbackTitle,
-        icons: [...new Set(fallbackIcons)]
+        icons: [...new Set(fallbackIcons)],
+        siteUrl: u.href
       });
     } catch {
        res.status(400).json({ error: "Invalid URL" });

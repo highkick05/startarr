@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { GridStack } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
-import { ShipWheel, Plus, X, Link2, Loader2, LayoutGrid, Search, Globe, Settings, Trash2, Image as ImageIcon, Video as VideoIcon, Upload, Trash, LogOut, User, ArrowRight } from 'lucide-react';
+import { ShipWheel, Plus, X, Link2, Loader2, LayoutGrid, Search, Globe, Settings, Trash2, Image as ImageIcon, Video as VideoIcon, Upload, Trash, LogOut, User, ArrowRight, Sparkles, Check, RefreshCw } from 'lucide-react';
 import { ShortcutItem } from './types';
 import { AuthContext } from './Auth.tsx';
 import { popularApps } from './data';
@@ -248,6 +248,7 @@ export default function App() {
 
   const currentCols = useRef(getColumns(layoutSize));
   const gridKey = useRef(0); // Used to force-remount grid when layout size changes
+  const handleRemovedEventRef = useRef<(e: any, items: any[]) => void>();
 
   const [showRecycleBin, setShowRecycleBin] = useState(false);
   const [recycleBin, setRecycleBin] = useState<ShortcutItem[]>([]);
@@ -256,13 +257,40 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{title: string, url: string}[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [customAppModal, setCustomAppModal] = useState<{ visible: boolean, url: string }>({ visible: false, url: '' });
-  const [iconSelectorModal, setIconSelectorModal] = useState<{ visible: boolean, shortcut: ShortcutItem | null }>({ visible: false, shortcut: null });
-  const [scrapedMetadata, setScrapedMetadata] = useState<{ title: string, icons: string[] } | null>(null);
-  const [isScraping, setIsScraping] = useState(false);
-  const [selectedCustomIcon, setSelectedCustomIcon] = useState('');
-  const [customTitle, setCustomTitle] = useState('');
   const [isAddingShortcut, setIsAddingShortcut] = useState(false);
+  const [quickIconSearch, setQuickIconSearch] = useState('');
+
+  const scanQuickIcons = async (targetUrl: string, searchQuery = '') => {
+    if (!targetUrl) return;
+    setContextMenu(prev => ({ ...prev, isScanning: true }));
+    try {
+      const res = await fetch('/api/scrape-metadata', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: targetUrl, query: searchQuery })
+      });
+      const data = await res.json();
+      if (data && Array.isArray(data.icons)) {
+        const hdScraped = data.icons.filter((i: string) => 
+          i && 
+          !i.toLowerCase().endsWith('.ico') && 
+          !i.toLowerCase().includes('.ico?') && 
+          !i.toLowerCase().includes('favicon.ico')
+        );
+        setContextMenu(prev => ({
+          ...prev,
+          isScanning: false,
+          extraIcons: [...new Set([...(prev.extraIcons || []), ...hdScraped])]
+        }));
+      } else {
+        setContextMenu(prev => ({ ...prev, isScanning: false }));
+      }
+    } catch (e) {
+      console.error("Failed to scan site for icons", e);
+      setContextMenu(prev => ({ ...prev, isScanning: false }));
+    }
+  };
 
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [isInputFocused, setIsInputFocused] = useState(false);
@@ -630,6 +658,7 @@ export default function App() {
       }
       handleGridChange(e, items);
     };
+    handleRemovedEventRef.current = handleRemovedEvent;
 
     gridInstance.current.on('change', (e, items) => { handleGridChange(e, items); });
     gridInstance.current.on('added', handleGridChange);
@@ -689,12 +718,16 @@ export default function App() {
             if (found && found.type !== 'category') {
               setContextMenu({
                 visible: true,
-                x: Math.min(e.clientX, window.innerWidth - 270),
-                y: Math.min(e.clientY, window.innerHeight - 380),
+                x: Math.min(e.clientX, window.innerWidth - 280),
+                y: Math.min(e.clientY, window.innerHeight - 520),
                 shortcut: found,
                 extraIcons: [],
                 isScanning: false
               });
+              setQuickIconSearch('');
+              if (found.url && found.type !== 'container') {
+                scanQuickIcons(found.url, '');
+              }
             }
             return prev;
           });
@@ -976,7 +1009,7 @@ export default function App() {
           subGrid.on('removed', (e, items) => {
              updateMinSize();
              if (items) {
-               handleRemovedEvent(e, items);
+               handleRemovedEventRef.current?.(e, items);
              }
           });
           subGrid.on('change', () => updateMinSize());
@@ -1007,7 +1040,7 @@ export default function App() {
       }
   };
 
-  const handleAddShortcut = (app: {title: string, url: string}) => {
+  const handleAddShortcut = (app: {title: string, url: string, iconUrl?: string}) => {
     if (!gridInstance.current) return;
     
     const newItem: ShortcutItem = {
@@ -1015,6 +1048,7 @@ export default function App() {
       type: 'app',
       title: app.title,
       url: app.url,
+      iconUrl: app.iconUrl,
       w: 1,
       h: 8,
     };
@@ -1771,11 +1805,14 @@ export default function App() {
                   
                   const rawTitle = contextMenu.shortcut.title || '';
                   const domainClean = domain.replace(/^www\./, '').split('.')[0] || '';
-                  const slug1 = rawTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
-                  const slug2 = rawTitle.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+                  // Clean rawTitle to strip subheadings like " – log in or sign up"
+                  const cleanTitle = rawTitle.split(/[-|–|—|:•·]/)[0].trim();
+                  const slug1 = cleanTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+                  const slug2 = cleanTitle.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
                   const slug3 = domainClean.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-                  const slugs = [...new Set([slug1, slug2, slug3].filter(Boolean))];
+                  // STRICT: Slugs must have length >= 3 to prevent single-letter collisions like 'c' matching Coinbase!
+                  const slugs = [...new Set([slug1, slug2, slug3].filter(s => s && s.length >= 3))];
                   
                   const quickIcons: string[] = [];
                   for (const s of slugs) {
@@ -1794,21 +1831,36 @@ export default function App() {
                   }
 
                   // Strict filter: Exclude all .ico files and deduplicate
-                  const uniqueQuickIcons = [...new Set(quickIcons)].filter(ico => 
+                  let displayedIcons = [...new Set(quickIcons)].filter(ico => 
                     !ico.toLowerCase().endsWith('.ico') && 
                     !ico.toLowerCase().includes('.ico?') && 
                     !ico.toLowerCase().includes('favicon.ico')
                   );
+
+                  if (quickIconSearch.trim()) {
+                    const term = quickIconSearch.trim().toLowerCase();
+                    const filtered = displayedIcons.filter(ico => ico.toLowerCase().includes(term));
+                    if (filtered.length > 0) {
+                      displayedIcons = filtered;
+                    }
+                  }
                   
                   return (
                     <div className="flex flex-col space-y-2 mt-3">
                        <div className="flex items-center justify-between">
-                         <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">Quick Icons</label>
-                         <span className="text-[9px] text-neutral-500 font-medium">HD Icons</span>
+                         <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
+                           <span>Quick Icons</span>
+                           {contextMenu.isScanning && (
+                             <RefreshCw size={10} className="animate-spin text-blue-400" />
+                           )}
+                         </label>
+                         <span className="text-[9px] text-neutral-500 font-medium">
+                           {contextMenu.isScanning ? 'Scanning site...' : `${displayedIcons.length} HD Logos`}
+                         </span>
                        </div>
                        
-                       <div className="flex gap-2 flex-wrap max-h-28 overflow-y-auto pr-1">
-                          {uniqueQuickIcons.map((ico, idx) => (
+                       <div className="flex gap-2 flex-wrap max-h-36 overflow-y-auto pr-1">
+                          {displayedIcons.map((ico, idx) => (
                              <button 
                                 key={idx}
                                 type="button"
@@ -1830,7 +1882,7 @@ export default function App() {
                                    onLoad={(e) => {
                                       const img = e.currentTarget;
                                       const isSvg = ico.toLowerCase().includes('.svg');
-                                      // Stricly exclude low quality icons (< 64px width or height)
+                                      // Strictly exclude low quality icons (< 64px width or height)
                                       if (!isSvg && img.naturalWidth > 0 && (img.naturalWidth < 64 || img.naturalHeight < 64)) {
                                          img.style.display = 'none';
                                          if (img.parentElement) {
@@ -1849,54 +1901,53 @@ export default function App() {
                           ))}
                        </div>
 
-                       <button
-                          type="button"
-                          disabled={contextMenu.isScanning}
-                          onClick={async () => {
-                            if (!contextMenu.shortcut?.url || contextMenu.isScanning) return;
-                            setContextMenu(prev => ({ ...prev, isScanning: true }));
-                            try {
-                              const res = await fetch('/api/scrape-metadata', {
-                                method: 'POST',
-                                credentials: 'include',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ url: contextMenu.shortcut.url })
-                              });
-                              const data = await res.json();
-                              if (data && Array.isArray(data.icons)) {
-                                const hdScraped = data.icons.filter((i: string) => 
-                                  i && 
-                                  !i.toLowerCase().endsWith('.ico') && 
-                                  !i.toLowerCase().includes('.ico?') && 
-                                  !i.toLowerCase().includes('favicon.ico')
-                                );
-                                setContextMenu(prev => ({
-                                  ...prev,
-                                  extraIcons: [...new Set([...(prev.extraIcons || []), ...hdScraped])],
-                                  isScanning: false
-                                }));
-                              } else {
-                                setContextMenu(prev => ({ ...prev, isScanning: false }));
-                              }
-                            } catch (err) {
-                              console.error("Failed to scan site for icons", err);
-                              setContextMenu(prev => ({ ...prev, isScanning: false }));
-                            }
-                          }}
-                          className="w-full py-1.5 px-2.5 bg-neutral-950/60 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
-                       >
-                          {contextMenu.isScanning ? (
-                            <>
-                              <Loader2 size={12} className="animate-spin text-blue-400" />
-                              <span>Scanning Website for HD Icons...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Search size={12} className="text-blue-400" />
-                              <span>Scan Site for More HD Icons</span>
-                            </>
-                          )}
-                       </button>
+                       {/* Inline Scan & Search bar (No popup modal!) */}
+                       <div className="flex gap-1.5 pt-1">
+                         <div className="relative flex-1">
+                           <input
+                             type="text"
+                             value={quickIconSearch}
+                             onChange={(e) => setQuickIconSearch(e.target.value)}
+                             onKeyDown={(e) => {
+                               if (e.key === 'Enter') {
+                                 e.preventDefault();
+                                 if (contextMenu.shortcut?.url) {
+                                   scanQuickIcons(contextMenu.shortcut.url, quickIconSearch.trim());
+                                 }
+                               }
+                             }}
+                             placeholder="Search site logos..."
+                             className="w-full bg-neutral-950/80 border border-neutral-800 rounded-lg px-2 py-1 text-[11px] text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-blue-500/50 transition-colors"
+                           />
+                           {quickIconSearch && (
+                             <button
+                               type="button"
+                               onClick={() => setQuickIconSearch('')}
+                               className="absolute right-1.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300"
+                             >
+                               <X size={11} />
+                             </button>
+                           )}
+                         </div>
+                         <button
+                           type="button"
+                           disabled={contextMenu.isScanning}
+                           onClick={() => {
+                             if (contextMenu.shortcut?.url) {
+                               scanQuickIcons(contextMenu.shortcut.url, quickIconSearch.trim());
+                             }
+                           }}
+                           className="px-2 py-1 bg-neutral-950/80 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-lg text-[11px] font-medium flex items-center gap-1 transition-colors shrink-0 disabled:opacity-50"
+                           title="Scan website for HD logos"
+                         >
+                           {contextMenu.isScanning ? (
+                             <RefreshCw size={11} className="animate-spin text-blue-400" />
+                           ) : (
+                             <Search size={11} className="text-blue-400" />
+                           )}
+                           <span>{contextMenu.isScanning ? 'Scanning' : 'Scan'}</span>
+                         </button>
+                       </div>
                     </div>
                   );
                 })()}
@@ -2074,113 +2125,6 @@ export default function App() {
                 </button>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {iconSelectorModal.visible && iconSelectorModal.shortcut && (
-        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="p-4 border-b border-neutral-800 flex justify-between items-center bg-neutral-950">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <ImageIcon size={18} className="text-purple-500" /> Change Icon for {iconSelectorModal.shortcut.title}
-              </h2>
-              <button onClick={() => { setIconSelectorModal({ visible: false, shortcut: null }); setScrapedMetadata(null); }} className="text-neutral-400 hover:text-white p-1 rounded-lg hover:bg-neutral-800">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto">
-              {!scrapedMetadata && !isScraping ? (
-                <div className="flex flex-col items-center justify-center py-8">
-                   <button 
-                     className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium transition-colors"
-                     onClick={async () => {
-                       setIsScraping(true);
-                       try {
-                         const res = await fetch('/api/scrape-metadata', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: iconSelectorModal.shortcut!.url })
-                         });
-                         const data = await res.json();
-                         setScrapedMetadata(data);
-                         if (data.title && data.title.trim()) {
-                           setIconSelectorModal(p => p.shortcut ? {...p, shortcut: {...p.shortcut, title: data.title.trim()}} : p);
-                           setShortcuts(prev => prev.map(s => s.id === iconSelectorModal.shortcut!.id ? {...s, title: data.title.trim()} : s));
-                         }
-                         setSelectedCustomIcon(iconSelectorModal.shortcut!.iconUrl || data.icons?.[0] || '');
-                       } catch (e) {
-                         console.error(e);
-                       } finally {
-                         setIsScraping(false);
-                       }
-                     }}
-                   >
-                     Scan Site for Icons
-                   </button>
-                </div>
-              ) : isScraping ? (
-                <div className="flex flex-col items-center justify-center py-12 text-neutral-400">
-                  <div className="animate-spin mb-4"><Loader2 size={32} /></div>
-                  <p>Discovering site icons...</p>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">Select Icon</label>
-                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 max-h-48 overflow-y-auto p-1">
-                      {scrapedMetadata?.icons.map((icon, i) => (
-                        <button 
-                          key={i} 
-                          onClick={() => setSelectedCustomIcon(icon)}
-                          className={`aspect-square rounded-xl border-2 flex items-center justify-center p-2 transition-all ${selectedCustomIcon === icon ? 'border-purple-500 bg-purple-500/10' : 'border-transparent bg-neutral-950 hover:border-neutral-700'}`}
-                        >
-                          <img src={icon} className="max-w-full max-h-full object-contain rounded-lg" onError={(e: any) => e.target.style.display='none'} />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <button 
-                    className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold transition-colors"
-                    onClick={() => {
-                      // Update shortcut
-                      const idToUpdate = iconSelectorModal.shortcut!.id;
-                      setShortcuts(prev => {
-                        // Deep clone and update
-                        const updateRecursive = (items: ShortcutItem[]): ShortcutItem[] => {
-                          return items.map(item => {
-                            if (item.id === idToUpdate) return { ...item, iconUrl: selectedCustomIcon };
-                            if (item.children) return { ...item, children: updateRecursive(item.children) };
-                            return item;
-                          });
-                        };
-                        const updated = updateRecursive(prev);
-                        fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
-                        return updated;
-                      });
-                      
-                      // Force DOM update
-                      if (gridContainerRef.current) {
-                        const el = gridContainerRef.current.querySelector(`[gs-id="${idToUpdate}"]`);
-                        if (el) {
-                          const img = el.querySelector('img');
-                          if (img) {
-                            img.src = selectedCustomIcon;
-                            img.dataset.fallback = '';
-                          }
-                        }
-                      }
-
-                      setIconSelectorModal({ visible: false, shortcut: null });
-                      setScrapedMetadata(null);
-                    }}
-                  >
-                    Save Icon
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       )}
