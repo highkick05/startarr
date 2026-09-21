@@ -250,11 +250,11 @@ function getBetterTitle(title: string, urlString: string) {
     
     // Clean common separator patterns like "Facebook – log in or sign up", "GitHub: Let's build from here"
     if (finalTitle) {
-      const sepMatch = finalTitle.match(/^([A-Za-z0-9\s]{3,30}?)\s*[-|–|—|:•·]\s*(log\s?in|sign\s?in|welcome|home|dashboard|the|let's|let’s|where|dive|watch|official|buy)/i);
+      const sepMatch = finalTitle.match(/^([A-Za-z0-9\s]{3,30}?)\s*[-–—:•·|/]\s*(log\s?in|sign\s?in|welcome|home|dashboard|the|let's|let’s|where|dive|watch|official|buy)/i);
       if (sepMatch && sepMatch[1]) {
         finalTitle = sepMatch[1].trim();
       } else {
-        const noiseRegex = /^(sign\s?in|log\s?in|welcome( to)?)\s*[-|–|—|:]?\s*|\s*[-|–|—|:]?\s*(sign\s?in|log\s?in|dashboard|home|welcome)$/gi;
+        const noiseRegex = /^(sign\s?in|log\s?in|welcome(\s+to)?)\s*[-–—:•·|/]\s*|\s*[-–—:•·|/]\s*(sign\s?in|log\s?in|dashboard|home|welcome)$/gi;
         finalTitle = finalTitle.replace(noiseRegex, '').trim();
       }
     }
