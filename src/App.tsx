@@ -6,6 +6,7 @@ import { ShortcutItem } from './types';
 import { AuthContext } from './Auth.tsx';
 import { popularApps } from './data';
 import { StartarrLogo } from './components/StartarrLogo';
+import { getHighResFallbackIcon, getModernGlobeIcon } from './utils/fallbackIcon';
 
 type LayoutSize = 'small' | 'medium' | 'large';
 
@@ -168,20 +169,13 @@ export default function App() {
        const imgWrapperEl = el.querySelector('.flex-1 > div');
        const imgEl = el.querySelector('img');
        if (imgEl && imgWrapperEl) {
-          const domain = (() => { try { return new URL(item.url).hostname; } catch { return ''; } })();
-          const fallbackIcon = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.title || 'Unknown')}&background=262626&color=fff&size=128`;
-          const googleIcon = domain ? `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128` : fallbackIcon;
-          const primaryIcon = domain ? `https://icon.horse/icon/${domain}` : googleIcon;
+          const highResFallback = getHighResFallbackIcon(item.title || '', item.url || '');
           
           if (updates.iconUrl !== undefined || updates.url !== undefined || updates.title !== undefined) {
-             imgEl.src = item.iconUrl || primaryIcon;
-             if (item.iconUrl) {
-                imgEl.removeAttribute('onload');
-                imgEl.setAttribute('onerror', `this.onerror=null; this.src='${googleIcon}';`);
-             } else {
-                imgEl.setAttribute('onload', `if(this.naturalWidth < 64 && !this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.naturalWidth < 64 && this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; }`);
-                imgEl.setAttribute('onerror', `if(!this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; } else { this.onerror=null; }`);
-             }
+             const currentIcon = (!item.iconUrl || item.iconUrl.includes('t3.gstatic.com')) ? highResFallback : item.iconUrl;
+             imgEl.src = currentIcon;
+             imgEl.setAttribute('onload', `if((this.naturalWidth > 0 && this.naturalWidth < 48) || this.naturalHeight < 48 || this.src.includes('t3.gstatic.com')) { this.onerror=null; this.src='${highResFallback}'; if(window.upgradeIcon) window.upgradeIcon('${item.id}', '${highResFallback}'); }`);
+             imgEl.setAttribute('onerror', `this.onerror=null; this.src='${highResFallback}'; if(window.upgradeIcon) window.upgradeIcon('${item.id}', '${highResFallback}');`);
              imgEl.dataset.fallback = '0';
           }
           if (updates.invertIcon !== undefined) {
@@ -529,11 +523,29 @@ export default function App() {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  // Set up global shortcut removal for inline HTML onclick handlers
+  // Set up global shortcut removal and icon upgrading for inline HTML onclick/onload handlers
   useEffect(() => {
     (window as any).removeShortcut = (id: string) => {
       const event = new CustomEvent('remove-shortcut', { detail: { id } });
       window.dispatchEvent(event);
+    };
+
+    (window as any).upgradeIcon = (id: string, newUrl: string) => {
+      setShortcuts(prev => {
+        const idx = prev.findIndex(s => s.id === id);
+        if (idx !== -1 && prev[idx].iconUrl !== newUrl) {
+          const updated = [...prev];
+          updated[idx] = { ...updated[idx], iconUrl: newUrl };
+          fetch('/api/settings', {
+            method: 'PUT',
+            keepalive: true,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) })
+          }).catch(console.error);
+          return updated;
+        }
+        return prev;
+      });
     };
 
     const handleRemove = (e: any) => {
@@ -605,6 +617,7 @@ export default function App() {
     return () => {
       window.removeEventListener('remove-shortcut', handleRemove);
       delete (window as any).removeShortcut;
+      delete (window as any).upgradeIcon;
     };
   }, []);
 
@@ -928,13 +941,8 @@ export default function App() {
     });
   };
 
-  const getFaviconUrl = (url: string) => {
-    try {
-      const domain = new URL(url).hostname;
-      return `https://icon.horse/icon/${domain}`;
-    } catch {
-      return '';
-    }
+  const getFaviconUrl = (url: string, title = '') => {
+    return getHighResFallbackIcon(title, url);
   };
 
   const addWidgetToGrid = (item: ShortcutItem, targetGrid?: any) => {
@@ -973,16 +981,11 @@ export default function App() {
         </div>
       `;
     } else {
-      const domain = (() => { try { return new URL(item.url).hostname; } catch { return ''; } })();
-      const fallbackIcon = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.title || 'Unknown')}&background=262626&color=fff&size=128`;
-      const googleIcon = domain ? `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128` : fallbackIcon;
-      const primaryIcon = domain ? `https://icon.horse/icon/${domain}` : googleIcon;
-      const iconUrl = item.iconUrl || primaryIcon;
+      const highResFallback = getHighResFallbackIcon(item.title || '', item.url || '');
+      const iconUrl = (!item.iconUrl || item.iconUrl.includes('t3.gstatic.com')) ? highResFallback : item.iconUrl;
       
-      const onloadAttr = item.iconUrl ? '' : `onload="if(this.naturalWidth < 64 && !this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.naturalWidth < 64 && this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; }"`;
-      const onerrorAttr = item.iconUrl 
-        ? `onerror="this.onerror=null; this.src='${googleIcon}';"`
-        : `onerror="if(!this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; } else { this.onerror=null; }"`;
+      const onloadAttr = `onload="if((this.naturalWidth > 0 && this.naturalWidth < 48) || this.naturalHeight < 48 || this.src.includes('t3.gstatic.com')) { this.onerror=null; this.src='${highResFallback}'; if(window.upgradeIcon) window.upgradeIcon('${item.id}', '${highResFallback}'); }"`;
+      const onerrorAttr = `onerror="this.onerror=null; this.src='${highResFallback}'; if(window.upgradeIcon) window.upgradeIcon('${item.id}', '${highResFallback}');"`;
 
       htmlContent = `
         <div class="grid-stack-item-content relative group flex flex-col items-center justify-center cursor-grab active:cursor-grabbing transition-transform duration-300 hover:scale-105 hover:bg-neutral-800/30 rounded-2xl"
@@ -1206,14 +1209,14 @@ export default function App() {
 
         const newId = 'shortcut_' + Date.now();
         const fallbackDomain = (() => { try { return new URL(formattedUrl).hostname; } catch { return formattedUrl; } })();
-        const horseIcon = `https://icon.horse/icon/${fallbackDomain}`;
+        const initialFallback = getHighResFallbackIcon(fallbackDomain, formattedUrl);
         
         const newItem = {
           id: newId,
           type: 'app' as const,
           title: fallbackDomain,
           url: formattedUrl,
-          iconUrl: horseIcon,
+          iconUrl: initialFallback,
           w: 1, h: 8
         };
 
@@ -1239,7 +1242,7 @@ export default function App() {
           
           updateShortcutDynamically(newId, {
              title: updatedTitle,
-             iconUrl: chosenIcon || horseIcon
+             iconUrl: chosenIcon || getHighResFallbackIcon(updatedTitle, formattedUrl)
           });
         })
         .catch(err => console.error("Failed to add custom shortcut", err));
@@ -1411,14 +1414,14 @@ export default function App() {
 
                         const newId = 'shortcut_' + Date.now();
                         const fallbackDomain = (() => { try { return new URL(formattedUrl).hostname; } catch { return formattedUrl; } })();
-                        const horseIcon = `https://icon.horse/icon/${fallbackDomain}`;
+                        const initialFallback = getHighResFallbackIcon(fallbackDomain, formattedUrl);
                         
                         const newItem = {
                           id: newId,
                           type: 'app' as const,
                           title: fallbackDomain,
                           url: formattedUrl,
-                          iconUrl: horseIcon,
+                          iconUrl: initialFallback,
                           w: 1, h: 8
                         };
 
@@ -1444,7 +1447,7 @@ export default function App() {
                           
                           updateShortcutDynamically(newId, {
                              title: updatedTitle,
-                             iconUrl: chosenIcon || horseIcon
+                             iconUrl: chosenIcon || getHighResFallbackIcon(updatedTitle, formattedUrl)
                           });
                         })
                         .catch(err => console.error("Failed to add custom shortcut", err));
@@ -1480,21 +1483,11 @@ export default function App() {
                       >
                         <div className="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center flex-shrink-0 overflow-hidden">
                            <img 
-                             src={app.iconUrl || getFaviconUrl(app.url)} 
+                             src={app.iconUrl || getFaviconUrl(app.url, app.title)} 
                              onError={(e) => {
                                const target = e.currentTarget;
-                               try {
-                                 const domain = new URL(app.url).hostname;
-                                 if (target.dataset.fallback === '1') {
-                                   target.onerror = null;
-                                   target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(app.title || 'U')}&background=262626&color=fff&size=64`;
-                                 } else {
-                                   target.dataset.fallback = '1';
-                                   target.src = `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`;
-                                 }
-                               } catch {
-                                 target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(app.title || 'U')}&background=262626&color=fff&size=64`;
-                               }
+                               target.onerror = null;
+                               target.src = getHighResFallbackIcon(app.title || '', app.url || '');
                              }}
                              className="w-full h-full object-cover"
                              alt=""
@@ -1523,21 +1516,11 @@ export default function App() {
                       >
                         <div className="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center flex-shrink-0 overflow-hidden">
                            <img 
-                             src={getFaviconUrl(res.url)}
+                             src={getFaviconUrl(res.url, res.title)}
                              onError={(e) => {
                                const target = e.currentTarget;
-                               try {
-                                 const domain = new URL(res.url).hostname;
-                                 if (target.dataset.fallback === '1') {
-                                   target.onerror = null;
-                                   target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(res.title || 'U')}&background=262626&color=fff&size=64`;
-                                 } else {
-                                   target.dataset.fallback = '1';
-                                   target.src = `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`;
-                                 }
-                               } catch {
-                                 target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(res.title || 'U')}&background=262626&color=fff&size=64`;
-                               }
+                               target.onerror = null;
+                               target.src = getHighResFallbackIcon(res.title || '', res.url || '');
                              }}
                              className="w-full h-full object-cover"
                              alt=""
@@ -1851,18 +1834,8 @@ export default function App() {
                       }} 
                       onError={(e) => { 
                         const target = e.currentTarget;
-                        try {
-                          const domain = new URL(contextMenu.shortcut.url).hostname;
-                          if (target.dataset.fallback === '1') {
-                            target.onerror = null;
-                            target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(contextMenu.shortcut?.title || 'U')}&background=262626&color=fff&size=64`;
-                          } else {
-                            target.dataset.fallback = '1';
-                            target.src = `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`;
-                          }
-                        } catch {
-                          target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(contextMenu.shortcut?.title || 'U')}&background=262626&color=fff&size=64`;
-                        }
+                        target.onerror = null;
+                        target.src = getHighResFallbackIcon(contextMenu.shortcut?.title || '', contextMenu.shortcut?.url || '');
                       }}
                       className="w-full h-full object-cover" 
                    />
@@ -1929,17 +1902,19 @@ export default function App() {
                   const slug2 = cleanTitle.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
                   const slug3 = domainClean.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-                  // Default icons from domain & live scraping
+                  // Default icons: HD Monogram, Modern Neon Globe, and scraped site icons
                   const defaultIcons: Array<{ title: string; url: string }> = [];
+                  const fallbackMonogram = getHighResFallbackIcon(contextMenu.shortcut?.title || '', contextMenu.shortcut?.url || '');
+                  const modernGlobe = getModernGlobeIcon();
+                  
+                  defaultIcons.push({ title: 'HD Monogram Badge', url: fallbackMonogram });
+                  defaultIcons.push({ title: 'Modern Neon Globe', url: modernGlobe });
+
                   if (contextMenu.extraIcons && contextMenu.extraIcons.length > 0) {
                     contextMenu.extraIcons.forEach(url => {
-                      defaultIcons.push({ title: 'Website Logo', url });
-                    });
-                  }
-                  if (domain) {
-                    defaultIcons.push({
-                      title: 'Google Favicon HD',
-                      url: `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`
+                      if (!url.includes('t3.gstatic.com')) {
+                        defaultIcons.push({ title: 'Website Logo', url });
+                      }
                     });
                   }
 
@@ -2001,8 +1976,8 @@ export default function App() {
                                    className="w-full h-full object-contain rounded" 
                                    onLoad={(e) => {
                                       const img = e.currentTarget;
-                                      const isSvg = ico.url.toLowerCase().includes('.svg');
-                                      if (!isSvg && img.naturalWidth > 0 && (img.naturalWidth < 32 || img.naturalHeight < 32)) {
+                                      const isSvg = ico.url.toLowerCase().includes('.svg') || ico.url.startsWith('data:image/svg');
+                                      if (!isSvg && img.naturalWidth > 0 && (img.naturalWidth < 48 || img.naturalHeight < 48 || ico.url.includes('t3.gstatic.com'))) {
                                          setFailedIconUrls(prev => new Set(prev).add(ico.url));
                                       }
                                    }}
