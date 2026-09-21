@@ -279,7 +279,7 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
     if (!fetchUrl.startsWith('http')) fetchUrl = 'https://' + fetchUrl;
     
     const response = await fetch(fetchUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; starterr/1.0)' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; startarr/1.0)' },
       signal: AbortSignal.timeout(5000)
     });
     const html = await response.text();
@@ -314,37 +314,46 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
       } catch {
         return null;
       }
-    }).filter(Boolean);
+    }).filter(Boolean) as string[];
 
-    resolvedIcons.push(new URL('/favicon.ico', baseUrl).href);
-    resolvedIcons.push(`https://icon.horse/icon/${baseUrl.hostname}`);
-    resolvedIcons.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${baseUrl.origin}&size=128`);
+    // Filter out low-quality .ico files
+    const hdIcons = resolvedIcons.filter(icon => !icon.toLowerCase().endsWith('.ico') && !icon.toLowerCase().includes('favicon.ico'));
+
+    // Google 128px high-res favicon
+    hdIcons.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${baseUrl.origin}&size=128`);
 
     const finalTitle = getBetterTitle(title || '', baseUrl.href);
     
     if (finalTitle) {
       const validWalkx = await getVerifiedWalkxcode(finalTitle);
       if (validWalkx.length > 0) {
-        resolvedIcons.unshift(...validWalkx.reverse());
+        hdIcons.unshift(...validWalkx.reverse());
+      }
+      const simpleSlug = finalTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (simpleSlug) {
+        hdIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${simpleSlug}.svg`);
       }
     }
 
-    res.json({ title: finalTitle, icons: [...new Set(resolvedIcons)] });
+    res.json({ title: finalTitle, icons: [...new Set(hdIcons)] });
   } catch (err) {
     try {
       const u = new URL(url.startsWith('http') ? url : 'https://' + url);
       const fallbackTitle = getBetterTitle('', u.href);
-      const fallbackIcons = [];
+      const fallbackIcons: string[] = [];
       if (fallbackTitle) {
         const validWalkx = await getVerifiedWalkxcode(fallbackTitle);
         fallbackIcons.push(...validWalkx);
+        const simpleSlug = fallbackTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (simpleSlug) {
+          fallbackIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${simpleSlug}.svg`);
+        }
       }
-      fallbackIcons.push(`https://icon.horse/icon/${u.hostname}`);
       fallbackIcons.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${u.origin}&size=128`);
       
       res.json({
         title: fallbackTitle,
-        icons: fallbackIcons
+        icons: [...new Set(fallbackIcons)]
       });
     } catch {
        res.status(400).json({ error: "Invalid URL" });

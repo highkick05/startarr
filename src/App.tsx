@@ -357,8 +357,9 @@ export default function App() {
     x: number;
     y: number;
     shortcut: ShortcutItem | null;
-    showQuickIcons?: boolean;
-}>({ visible: false, x: 0, y: 0, shortcut: null, showQuickIcons: false });
+    extraIcons?: string[];
+    isScanning?: boolean;
+}>({ visible: false, x: 0, y: 0, shortcut: null, extraIcons: [], isScanning: false });
 
   
 
@@ -688,10 +689,11 @@ export default function App() {
             if (found && found.type !== 'category') {
               setContextMenu({
                 visible: true,
-                x: Math.min(e.clientX, window.innerWidth - 200),
-                y: Math.min(e.clientY, window.innerHeight - 200),
+                x: Math.min(e.clientX, window.innerWidth - 270),
+                y: Math.min(e.clientY, window.innerHeight - 380),
                 shortcut: found,
-                showQuickIcons: false
+                extraIcons: [],
+                isScanning: false
               });
             }
             return prev;
@@ -1767,56 +1769,134 @@ export default function App() {
                   } catch(e) {}
                   if (!domain) return null;
                   
-                  const sanitizedTitle = (contextMenu.shortcut.title || '').toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-                  let quickIcons = [
-                    `https://icon.horse/icon/${domain}`,
-                    `https://logo.clearbit.com/${domain}`,
-                    `https://icons.duckduckgo.com/ip3/${domain}.ico`,
-                    `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`
-                  ];
-                  if (sanitizedTitle) {
-                    quickIcons.unshift(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${sanitizedTitle}.png`);
-                    quickIcons.unshift(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${sanitizedTitle}.svg`);
-                    if (sanitizedTitle.includes('-')) {
-                      const noDash = sanitizedTitle.replace(/-/g, '');
-                      quickIcons.unshift(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${noDash}.png`);
-                      quickIcons.unshift(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${noDash}.svg`);
-                    }
-                  }
-                  // Deduplicate array just in case
-                  const uniqueQuickIcons = [...new Set(quickIcons)];
+                  const rawTitle = contextMenu.shortcut.title || '';
+                  const domainClean = domain.replace(/^www\./, '').split('.')[0] || '';
+                  const slug1 = rawTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+                  const slug2 = rawTitle.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+                  const slug3 = domainClean.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                  const slugs = [...new Set([slug1, slug2, slug3].filter(Boolean))];
                   
+                  const quickIcons: string[] = [];
+                  for (const s of slugs) {
+                    quickIcons.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${s}.svg`);
+                    quickIcons.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${s}.png`);
+                    quickIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${s}.svg`);
+                    quickIcons.push(`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${s}.svg`);
+                  }
+
+                  // High-res Google 128px Favicon (HD)
+                  quickIcons.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`);
+
+                  // Append any extra icons found from live scanning
+                  if (contextMenu.extraIcons && contextMenu.extraIcons.length > 0) {
+                    quickIcons.push(...contextMenu.extraIcons);
+                  }
+
+                  // Strict filter: Exclude all .ico files and deduplicate
+                  const uniqueQuickIcons = [...new Set(quickIcons)].filter(ico => 
+                    !ico.toLowerCase().endsWith('.ico') && 
+                    !ico.toLowerCase().includes('.ico?') && 
+                    !ico.toLowerCase().includes('favicon.ico')
+                  );
                   
                   return (
-                    <div className="flex flex-col space-y-1 mt-3">
-                       <div className="flex items-center justify-between mb-0.5">
+                    <div className="flex flex-col space-y-2 mt-3">
+                       <div className="flex items-center justify-between">
                          <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">Quick Icons</label>
-                         {!contextMenu.showQuickIcons && (
-                           <button 
-                             onClick={() => setContextMenu(prev => ({ ...prev, showQuickIcons: true }))}
-                             className="text-[9px] text-blue-400 hover:text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded transition-colors"
-                           >
-                             Find Icons
-                           </button>
-                         )}
+                         <span className="text-[9px] text-neutral-500 font-medium">HD Icons</span>
                        </div>
                        
-                       {contextMenu.showQuickIcons && (
-                         <div className="flex gap-2 flex-wrap">
-                            {uniqueQuickIcons.map((ico, idx) => (
-                               <button 
-                                  key={idx}
-                                  onClick={() => {
-                                     updateShortcutDynamically(contextMenu.shortcut!.id, { iconUrl: ico });
-                                     setContextMenu(prev => ({ ...prev, shortcut: { ...prev.shortcut!, iconUrl: ico } }));
-                                  }}
-                                  className="w-8 h-8 rounded-lg bg-neutral-950/50 border border-neutral-800 hover:border-blue-500/50 overflow-hidden flex items-center justify-center transition-all p-1 shrink-0 mb-1"
-                               >
-                                  <img src={ico} className="w-full h-full object-contain rounded" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement!.style.display = 'none'; }} />
-                               </button>
-                            ))}
-                         </div>
-                       )}
+                       <div className="flex gap-2 flex-wrap max-h-28 overflow-y-auto pr-1">
+                          {uniqueQuickIcons.map((ico, idx) => (
+                             <button 
+                                key={idx}
+                                type="button"
+                                title="Select icon"
+                                onClick={() => {
+                                   updateShortcutDynamically(contextMenu.shortcut!.id, { iconUrl: ico });
+                                   setContextMenu(prev => ({ ...prev, shortcut: { ...prev.shortcut!, iconUrl: ico } }));
+                                }}
+                                className={`w-8 h-8 rounded-lg bg-neutral-950/60 border overflow-hidden flex items-center justify-center transition-all p-1 shrink-0 mb-1 ${
+                                  contextMenu.shortcut?.iconUrl === ico 
+                                    ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-500/10' 
+                                    : 'border-neutral-800 hover:border-neutral-700 hover:bg-neutral-900'
+                                }`}
+                             >
+                                <img 
+                                   src={ico} 
+                                   alt="icon"
+                                   className="w-full h-full object-contain rounded" 
+                                   onLoad={(e) => {
+                                      const img = e.currentTarget;
+                                      const isSvg = ico.toLowerCase().includes('.svg');
+                                      // Stricly exclude low quality icons (< 64px width or height)
+                                      if (!isSvg && img.naturalWidth > 0 && (img.naturalWidth < 64 || img.naturalHeight < 64)) {
+                                         img.style.display = 'none';
+                                         if (img.parentElement) {
+                                            img.parentElement.style.display = 'none';
+                                         }
+                                      }
+                                   }}
+                                   onError={(e) => { 
+                                      e.currentTarget.style.display = 'none'; 
+                                      if (e.currentTarget.parentElement) {
+                                         e.currentTarget.parentElement.style.display = 'none'; 
+                                      }
+                                   }} 
+                                />
+                             </button>
+                          ))}
+                       </div>
+
+                       <button
+                          type="button"
+                          disabled={contextMenu.isScanning}
+                          onClick={async () => {
+                            if (!contextMenu.shortcut?.url || contextMenu.isScanning) return;
+                            setContextMenu(prev => ({ ...prev, isScanning: true }));
+                            try {
+                              const res = await fetch('/api/scrape-metadata', {
+                                method: 'POST',
+                                credentials: 'include',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ url: contextMenu.shortcut.url })
+                              });
+                              const data = await res.json();
+                              if (data && Array.isArray(data.icons)) {
+                                const hdScraped = data.icons.filter((i: string) => 
+                                  i && 
+                                  !i.toLowerCase().endsWith('.ico') && 
+                                  !i.toLowerCase().includes('.ico?') && 
+                                  !i.toLowerCase().includes('favicon.ico')
+                                );
+                                setContextMenu(prev => ({
+                                  ...prev,
+                                  extraIcons: [...new Set([...(prev.extraIcons || []), ...hdScraped])],
+                                  isScanning: false
+                                }));
+                              } else {
+                                setContextMenu(prev => ({ ...prev, isScanning: false }));
+                              }
+                            } catch (err) {
+                              console.error("Failed to scan site for icons", err);
+                              setContextMenu(prev => ({ ...prev, isScanning: false }));
+                            }
+                          }}
+                          className="w-full py-1.5 px-2.5 bg-neutral-950/60 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-lg text-[11px] font-medium flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+                       >
+                          {contextMenu.isScanning ? (
+                            <>
+                              <Loader2 size={12} className="animate-spin text-blue-400" />
+                              <span>Scanning Website for HD Icons...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Search size={12} className="text-blue-400" />
+                              <span>Scan Site for More HD Icons</span>
+                            </>
+                          )}
+                       </button>
                     </div>
                   );
                 })()}
