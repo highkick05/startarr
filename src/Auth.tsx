@@ -1,5 +1,6 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { LayoutGrid, Lock, User, LogIn, UserPlus } from 'lucide-react';
+import { StartarrLogo } from './components/StartarrLogo';
 
 export const AuthContext = createContext<any>(null);
 
@@ -101,8 +102,8 @@ const AuthScreen = () => {
   return (
     <div className="min-h-screen bg-black flex items-center justify-center font-sans text-neutral-100 p-4">
       <div className="w-full max-w-sm bg-neutral-900/50 backdrop-blur-xl border border-neutral-800 rounded-2xl p-6 shadow-2xl">
-        <div className="flex items-center space-x-2 mb-8 justify-center">
-          <span className="font-semibold text-xl tracking-tight">starterr</span>
+        <div className="flex items-center mb-8 justify-center">
+          <StartarrLogo size="lg" />
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
