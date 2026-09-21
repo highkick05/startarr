@@ -1,25 +1,85 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
   <defs>
-    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#06b6d4" />
-      <stop offset="100%" stop-color="#2563eb" />
+    <radialGradient id="neon-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00f3ff" stop-opacity="0.9" />
+      <stop offset="45%" stop-color="#ec4899" stop-opacity="0.5" />
+      <stop offset="100%" stop-color="#09090b" stop-opacity="0" />
+    </radialGradient>
+    
+    <linearGradient id="neon-cyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="35%" stop-color="#00f3ff" />
+      <stop offset="70%" stop-color="#a855f7" />
+      <stop offset="100%" stop-color="#ec4899" />
     </linearGradient>
-    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.3" />
+
+    <linearGradient id="neon-pink" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="50%" stop-color="#ec4899" />
+      <stop offset="100%" stop-color="#8b5cf6" />
+    </linearGradient>
+
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur1" />
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur2" />
+      <feMerge>
+        <feMergeNode in="blur2" />
+        <feMergeNode in="blur1" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
     </filter>
   </defs>
-  
-  <rect x="0" y="0" width="256" height="256" rx="64" fill="url(#bg-grad)" />
-  
-  <g transform="translate(128, 128) scale(4.5)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" filter="url(#shadow)">
-    <circle cx="0" cy="0" r="8"/>
-    <path d="M0 -8v-6"/>
-    <path d="M0 14v-6"/>
-    <path d="M8 0h6"/>
-    <path d="M-14 0h6"/>
-    <path d="m5.66 -5.66 4.24 -4.24"/>
-    <path d="m-5.66 5.66 -4.24 4.24"/>
-    <path d="m-5.66 -5.66 -4.24 -4.24"/>
-    <path d="m5.66 5.66 4.24 4.24"/>
+
+  <style>
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(0.84);
+        opacity: 0.85;
+      }
+      50% {
+        transform: scale(1.14);
+        opacity: 1;
+      }
+    }
+    @keyframes aura-pulse {
+      0%, 100% {
+        opacity: 0.35;
+        transform: scale(0.85);
+      }
+      50% {
+        opacity: 0.95;
+        transform: scale(1.25);
+      }
+    }
+    .star-group {
+      transform-origin: 64px 64px;
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+    .aura {
+      transform-origin: 64px 64px;
+      animation: aura-pulse 1.6s ease-in-out infinite;
+    }
+  </style>
+
+  <!-- Dark sleek squircle background for contrast on both dark and light browser chrome -->
+  <rect x="6" y="6" width="116" height="116" rx="32" fill="#07090e" stroke="#00f3ff" stroke-opacity="0.4" stroke-width="2.5" />
+
+  <!-- Pulsating ambient neon aura -->
+  <circle class="aura" cx="64" cy="64" r="46" fill="url(#neon-glow)" />
+
+  <g class="star-group" filter="url(#glow)">
+    <!-- Diagonal secondary 4-point star -->
+    <path d="M 64 36 Q 64 64 92 64 Q 64 64 64 92 Q 64 64 36 64 Q 64 64 64 36 Z" 
+          transform="rotate(45 64 64)" 
+          fill="url(#neon-pink)" 
+          opacity="0.85" />
+
+    <!-- Main primary 4-point star -->
+    <path d="M 64 16 Q 64 64 112 64 Q 64 64 64 112 Q 64 64 16 64 Q 64 64 64 16 Z" 
+          fill="url(#neon-cyan)" />
+
+    <!-- Brilliant glowing star core -->
+    <circle cx="64" cy="64" r="4" fill="#ffffff" />
+    <circle cx="64" cy="64" r="8" fill="#00f3ff" opacity="0.7" />
   </g>
 </svg>
