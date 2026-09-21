@@ -68,7 +68,7 @@ export default function App() {
               const parent = target.parentElement?.closest('.grid-stack-item');
               if (parent) {
                 parent.classList.add('subgrid-is-dragging');
-                parent.style.zIndex = '2147483647';
+                (parent as HTMLElement).style.zIndex = '2147483647';
               }
             } 
           }
@@ -77,7 +77,7 @@ export default function App() {
           if (!document.querySelector('.ui-draggable-dragging, .grid-stack-item-dragging')) {
              document.querySelectorAll('.subgrid-is-dragging').forEach(el => {
                el.classList.remove('subgrid-is-dragging');
-               el.style.zIndex = '';
+               (el as HTMLElement).style.zIndex = '';
              });
           }
         }
@@ -575,7 +575,7 @@ export default function App() {
       draggable: {
         cancel: '.no-drag', appendTo: 'body'
       }
-    }, gridContainerRef.current);
+    } as any, gridContainerRef.current);
 
     // Initial load silently
     gridInstance.current.removeAll();
@@ -957,7 +957,7 @@ export default function App() {
             removeTimeout: 0,
             disableResize: true,
             draggable: { appendTo: 'body', cancel: '.no-drag' }
-          });
+          } as any);
           
           (subGrid as any)._autoColumn = true;
           
@@ -992,7 +992,7 @@ export default function App() {
               const parentContainer = subGridEl.closest('.grid-stack-item');
               if (parentContainer) {
                 parentContainer.classList.add('subgrid-is-dragging');
-                parentContainer.style.zIndex = '99999';
+                (parentContainer as HTMLElement).style.zIndex = '99999';
               }
             }
           });
@@ -1001,7 +1001,7 @@ export default function App() {
               const parentContainer = subGridEl.closest('.grid-stack-item');
               if (parentContainer) {
                 parentContainer.classList.remove('subgrid-is-dragging');
-                parentContainer.style.zIndex = '';
+                (parentContainer as HTMLElement).style.zIndex = '';
               }
             }
           });
@@ -1035,7 +1035,7 @@ export default function App() {
             }
           });
           (subGrid as any).updateMinSize = updateMinSize;
-          setTimeout(() => updateMinSize(true), 50);
+          setTimeout(() => updateMinSize(), 50);
         }
       }
   };
@@ -1226,7 +1226,7 @@ export default function App() {
               <div className="absolute inset-0 bg-white/20 rotate-45 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
               <ShipWheel size={18} className="text-white drop-shadow-md" />
             </div>
-            <span className="font-bold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60 drop-shadow-sm">startarr</span>
+            <span className="font-bold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60 drop-shadow-sm">Startarr</span>
           </div>
           <div className="flex items-center space-x-3 pointer-events-auto text-sm font-medium text-neutral-200">
             <span>{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -1509,7 +1509,7 @@ export default function App() {
         <div className="p-6 border-b border-neutral-800 flex justify-between items-center bg-neutral-900/50 backdrop-blur sticky top-0 z-10 shrink-0">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <Settings size={20} className="text-neutral-400" />
-            startarr Settings
+            Startarr Settings
           </h2>
           <button onClick={() => setIsSettingsOpen(false)} className="text-neutral-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-neutral-800">
              <X size={24} />
