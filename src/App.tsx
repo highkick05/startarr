@@ -58,7 +58,9 @@ export default function App() {
           }
         }
         if (settings.tint_color) setTintColor(settings.tint_color);
-        if (settings.tint_opacity !== null) setTintOpacity(settings.tint_opacity);
+        if (settings.tint_opacity !== null && settings.tint_opacity !== undefined) setTintOpacity(settings.tint_opacity);
+        if (settings.ui_opacity !== null && settings.ui_opacity !== undefined) setUiOpacity(settings.ui_opacity);
+        if (settings.ui_blur !== null && settings.ui_blur !== undefined) setUiBlur(settings.ui_blur);
         if (settings.show_recycle_bin !== undefined) setShowRecycleBin(!!settings.show_recycle_bin);
         if (settings.recycle_bin_json) {
            try {
@@ -345,7 +347,7 @@ export default function App() {
   
   const [tintColor, setTintColor] = useState('#000000');
   const [tintOpacity, setTintOpacity] = useState(40);
-  const [uiOpacity, setUiOpacity] = useState(100);
+  const [uiOpacity, setUiOpacity] = useState(50);
   const [uiBlur, setUiBlur] = useState(16);
   const [uploadingBg, setUploadingBg] = useState(false);
 
@@ -1777,11 +1779,11 @@ export default function App() {
         </div>
       </div>
       
-      {/* Backdrop for Settings side panel */}
+      {/* Click-outside backdrop for Settings panel (without blurring or dimming dashboard) */}
       {isSettingsOpen && (
         <div 
           onClick={() => setIsSettingsOpen(false)}
-          className="fixed inset-0 bg-black/40 backdrop-blur-xs z-40 transition-opacity duration-300"
+          className="fixed inset-0 z-40"
         />
       )}
       
@@ -2081,13 +2083,6 @@ export default function App() {
 
           </div>
         </div>
-      )}
-
-      {isSettingsOpen && (
-        <div 
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity"
-          onClick={() => setIsSettingsOpen(false)}
-        />
       )}
 
 
