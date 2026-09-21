@@ -93,7 +93,7 @@ app.post("/api/auth/register", async (req, res) => {
     // Default settings
     await db.run(
       "INSERT INTO settings (user_id, active_background, tint_color, tint_opacity, ui_opacity, ui_blur, layout_size, shortcuts_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
-      [userId, "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=2560&q=80", "#000000", 40, 100, 16, "medium", "[]"]
+      [userId, "/default-background.jpg", "#000000", 40, 100, 16, "medium", "[]"]
     );
     
     const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });

@@ -34,6 +34,11 @@ const DEFAULT_CATEGORIES: string[] = [
   "Volunteering", "VR & AR", "Weather", "Work", "Writing", "Yoga & Pilates"
 ];
 
+const PRESET_BACKGROUNDS = [
+  { id: 'preset-cyber-workstation', name: 'Cyber Station', url: '/default-background.jpg' },
+  { id: 'preset-matrix-code', name: 'Matrix Rain', url: '/backgrounds/matrix-code.jpg' },
+];
+
 export default function App() {
   const { user, logout } = React.useContext(AuthContext);
   const [dataLoaded, setDataLoaded] = useState(false);
@@ -45,7 +50,13 @@ export default function App() {
     ]).then(([settings, bgData]) => {
       if (settings) {
         if (settings.layout_size) setLayoutSize(settings.layout_size);
-        if (settings.active_background) setActiveBackground(settings.active_background);
+        if (settings.active_background) {
+          if (settings.active_background.includes('photo-1472214103451')) {
+            setActiveBackground('/default-background.jpg');
+          } else {
+            setActiveBackground(settings.active_background);
+          }
+        }
         if (settings.tint_color) setTintColor(settings.tint_color);
         if (settings.tint_opacity !== null) setTintOpacity(settings.tint_opacity);
         if (settings.show_recycle_bin !== undefined) setShowRecycleBin(!!settings.show_recycle_bin);
@@ -330,7 +341,7 @@ export default function App() {
   }, []);
 
   const [backgrounds, setBackgrounds] = useState<any[]>([]);
-  const [activeBackground, setActiveBackground] = useState('https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=2560&q=80');
+  const [activeBackground, setActiveBackground] = useState('/default-background.jpg');
   
   const [tintColor, setTintColor] = useState('#000000');
   const [tintOpacity, setTintOpacity] = useState(40);
@@ -1575,19 +1586,32 @@ export default function App() {
                 </label>
               </div>
 
-              {backgrounds.length > 0 && (
                 <div className="grid grid-cols-3 gap-2 mt-4">
                   <div 
                     onClick={() => setActiveBackground('none')}
-                    className={`aspect-video rounded-lg cursor-pointer overflow-hidden relative border-2 flex items-center justify-center bg-neutral-950 ${activeBackground === 'none' ? 'border-blue-500' : 'border-transparent hover:border-neutral-700'}`}
+                    className={`aspect-video rounded-lg cursor-pointer overflow-hidden relative border-2 flex items-center justify-center bg-neutral-950 ${activeBackground === 'none' ? 'border-emerald-500' : 'border-transparent hover:border-neutral-700'}`}
                   >
                      <span className="text-xs text-neutral-500 font-medium">None</span>
                   </div>
+                  {PRESET_BACKGROUNDS.map(preset => (
+                    <div 
+                      key={preset.id}
+                      onClick={() => setActiveBackground(preset.url)}
+                      className={`aspect-video rounded-lg cursor-pointer overflow-hidden relative group border-2 ${activeBackground === preset.url ? 'border-emerald-500' : 'border-transparent hover:border-neutral-700'}`}
+                      title={preset.name}
+                    >
+                      <img src={preset.url} alt={preset.name} className="w-full h-full object-cover pointer-events-none" />
+                      <div className="absolute inset-0 bg-black/25 group-hover:bg-black/10 transition-colors" />
+                      <div className="absolute bottom-1 left-1 bg-black/70 rounded px-1.5 py-0.5 backdrop-blur-sm pointer-events-none">
+                        <span className="text-[10px] font-medium text-neutral-200 tracking-tight leading-none block">{preset.name}</span>
+                      </div>
+                    </div>
+                  ))}
                   {backgrounds.map(bg => (
                     <div 
                       key={bg.id}
                       onClick={() => setActiveBackground(bg.url)}
-                      className={`aspect-video rounded-lg cursor-pointer overflow-hidden relative group border-2 ${activeBackground === bg.url ? 'border-blue-500' : 'border-transparent hover:border-neutral-700'}`}
+                      className={`aspect-video rounded-lg cursor-pointer overflow-hidden relative group border-2 ${activeBackground === bg.url ? 'border-emerald-500' : 'border-transparent hover:border-neutral-700'}`}
                     >
                       {bg.type === 'video' ? (
                         <video src={bg.url} className="w-full h-full object-cover pointer-events-none" />
@@ -1605,7 +1629,6 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-              )}
 
               <div className="pt-4 space-y-4">
                 <div className="flex items-center justify-between">
