@@ -78,3 +78,17 @@
 .grid-stack {
   /* removed z-index: 100 to prevent stacking context trapping */
 }
+
+/* Terminal Cursor Normal Sharp Blink */
+@keyframes terminal-cursor-blink {
+  0%, 49.9% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
+  }
+}
+
+.terminal-cursor-blink {
+  animation: terminal-cursor-blink 1s infinite;
+}

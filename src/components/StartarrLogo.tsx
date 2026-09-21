@@ -92,10 +92,11 @@ export const StartarrLogo: React.FC<StartarrLogoProps> = ({
             {typedStart}
           </span>
 
-          {/* Glowing neon terminal cursor divider "|" */}
+          {/* Glowing neon terminal cursor divider "|" with authentic on/off blink */}
           <span
-            className={`font-bold text-[#2ef871] mx-[0.5px] transition-all duration-150 ${
-              isTyping ? 'animate-pulse' : ''
+            key={isTyping ? 'typing' : 'idle'}
+            className={`font-bold text-[#2ef871] mx-[0.5px] ${
+              isTyping ? 'opacity-100' : 'terminal-cursor-blink'
             }`}
             style={{
               textShadow:
