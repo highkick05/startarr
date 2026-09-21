@@ -33,6 +33,8 @@ export async function getDb() {
       ui_blur INTEGER DEFAULT 16,
       layout_size TEXT,
       shortcuts_json TEXT,
+      show_recycle_bin INTEGER DEFAULT 0,
+      recycle_bin_json TEXT DEFAULT '[]',
       FOREIGN KEY(user_id) REFERENCES users(id)
     );
 
@@ -59,7 +61,7 @@ export async function getDb() {
     // Column already exists
   }
   try {
-    await dbInstance.execute("ALTER TABLE settings ADD COLUMN show_recycle_bin INTEGER DEFAULT 1;");
+    await dbInstance.execute("ALTER TABLE settings ADD COLUMN show_recycle_bin INTEGER DEFAULT 0;");
   } catch (e) {}
   try {
     await dbInstance.execute("ALTER TABLE settings ADD COLUMN recycle_bin_json TEXT DEFAULT '[]';");

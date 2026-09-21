@@ -92,8 +92,8 @@ app.post("/api/auth/register", async (req, res) => {
     
     // Default settings
     await db.run(
-      "INSERT INTO settings (user_id, active_background, tint_color, tint_opacity, ui_opacity, ui_blur, layout_size, shortcuts_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
-      [userId, "/default-background.jpg", "#000000", 40, 100, 16, "medium", "[]"]
+      "INSERT INTO settings (user_id, active_background, tint_color, tint_opacity, ui_opacity, ui_blur, layout_size, shortcuts_json, show_recycle_bin, recycle_bin_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+      [userId, "/default-background.jpg", "#000000", 40, 100, 16, "medium", "[]", 0, "[]"]
     );
     
     const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });

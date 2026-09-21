@@ -1562,7 +1562,7 @@ export default function App() {
                   setShowRecycleBin(val);
                   fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ show_recycle_bin: val }) }).catch(console.error);
                 }}
-                className={`w-11 h-6 rounded-full transition-colors relative ${showRecycleBin ? 'bg-blue-500' : 'bg-neutral-700'}`}
+                className={`w-11 h-6 rounded-full transition-colors relative ${showRecycleBin ? 'bg-emerald-500' : 'bg-neutral-700'}`}
               >
                 <div className={`absolute top-1 bottom-1 w-4 bg-white rounded-full transition-transform ${showRecycleBin ? 'translate-x-6' : 'translate-x-1'}`}></div>
               </button>
