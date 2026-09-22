@@ -38,6 +38,7 @@ import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
 import { createServer as createViteServer } from "vite";
 import { getDb } from "./src/db.ts";
+import { getActualDomain, getDomainBrand } from "./src/utils/domain.ts";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
@@ -391,7 +392,7 @@ function getBetterTitle(title: string, urlString: string) {
       }
     }
 
-    const genericTitles = ['login', 'home', 'dashboard', 'welcome', 'index', 'sign in', 'log in', 'error', '404', 'forbidden', 'access denied', 'blocked', 'robot check', 'security check', 'just a moment', 'c'];
+    const genericTitles = ['login', 'home', 'dashboard', 'welcome', 'index', 'sign in', 'log in', 'error', '404', 'forbidden', 'access denied', 'blocked', 'robot check', 'security check', 'just a moment', 'c', 'ibs'];
     const lowerTitle = finalTitle.toLowerCase();
     const isDomain = /^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(finalTitle);
     
@@ -400,7 +401,8 @@ function getBetterTitle(title: string, urlString: string) {
         hostname = new URL(urlString.startsWith('http') ? urlString : 'https://' + urlString).hostname.toLowerCase();
     } catch(e) { /* ignore */ }
     
-    const domainPart = hostname.replace(/^www\./, '').split('.')[0] || '';
+    const brandPart = getDomainBrand(urlString || hostname);
+    const domainPart = brandPart || (hostname.replace(/^www\./, '').split('.')[0] || '');
     const isTitleGeneric = !finalTitle || genericTitles.includes(lowerTitle) || finalTitle.includes('://') || isDomain || finalTitle.length < 3;
 
     // Check dictionary matching on exact hostname segments ONLY (never arbitrary substring includes!)
@@ -420,229 +422,256 @@ function getBetterTitle(title: string, urlString: string) {
             }
         }
 
-        // If title was generic or empty, use the dictionary match or clean domain name
+        // If title was generic or empty, use the dictionary match or clean brand name
         if (isTitleGeneric) {
             if (dictMatch) {
                 finalTitle = dictMatch;
+            } else if (brandPart) {
+                finalTitle = brandPart.charAt(0).toUpperCase() + brandPart.slice(1);
             } else if (domainPart) {
                 finalTitle = domainPart.charAt(0).toUpperCase() + domainPart.slice(1);
             }
         }
     }
     
-    return finalTitle || (domainPart ? domainPart.charAt(0).toUpperCase() + domainPart.slice(1) : '');
+    const resolvedBrand = brandPart || domainPart;
+    return finalTitle || (resolvedBrand ? resolvedBrand.charAt(0).toUpperCase() + resolvedBrand.slice(1) : '');
 }
 
+function extractIconsFromHtml(html: string, baseUrl: URL, query = ''): string[] {
+  const icons = new Set<string>();
+
+  // 1. Extract link tags: apple-touch-icon, icon, mask-icon, manifest
+  const linkRegex = /<link[^>]+rel=["']?(?:shortcut icon|icon|apple-touch-icon|mask-icon)["']?[^>]*href=["']([^"'>\s]+)["']/gi;
+  let match;
+  while ((match = linkRegex.exec(html)) !== null) {
+    if (match[1] && !match[1].includes('&#')) icons.add(match[1]);
+  }
+  
+  // 2. OpenGraph / Twitter Image (non-greedy within a single meta tag)
+  const ogImageRegex1 = /<meta\s+[^>]*?(?:property|name)=["'](?:og:image|twitter:image|twitter:image:src)["'][^>]*?content=["']([^"'>\s]+)["'][^>]*>/gi;
+  const ogImageRegex2 = /<meta\s+[^>]*?content=["']([^"'>\s]+)["'][^>]*?(?:property|name)=["'](?:og:image|twitter:image|twitter:image:src)["'][^>]*>/gi;
+  while ((match = ogImageRegex1.exec(html)) !== null) {
+    if (match[1] && !match[1].includes('&#')) icons.add(match[1]);
+  }
+  while ((match = ogImageRegex2.exec(html)) !== null) {
+    if (match[1] && !match[1].includes('&#')) icons.add(match[1]);
+  }
+
+  // 3. Search site's HTML for logo/brand images and query matches
+  const imgRegex = /<img\s+[^>]*?src=["']([^"'>\s]+)["'][^>]*>/gi;
+  while ((match = imgRegex.exec(html)) !== null) {
+    const fullTag = match[0];
+    const src = match[1];
+    if (!src || src.startsWith('data:') || src.includes('&#')) continue;
+    const matchesSearch = query && query.trim() && new RegExp(query.trim(), 'i').test(fullTag);
+    const isLogoOrBrand = /logo|brand|icon|symbol|header-img|navbar-brand|site-logo/i.test(fullTag);
+    if (isLogoOrBrand || matchesSearch) {
+      icons.add(src);
+    }
+  }
+
+  // 4. Also check source tags inside picture or svg elements
+  const sourceRegex = /<source\s+[^>]*?srcset=["']([^"'>]+)["'][^>]*>/gi;
+  while ((match = sourceRegex.exec(html)) !== null) {
+    const rawSrc = match[1].split(',')[0].trim().split(' ')[0];
+    if (rawSrc && !rawSrc.includes('&#') && (/logo|brand|icon|symbol/i.test(match[0]) || (query && new RegExp(query.trim(), 'i').test(match[0])))) {
+      icons.add(rawSrc);
+    }
+  }
+
+  // Resolve relative paths to absolute URLs with strict validation
+  return Array.from(icons).map(icon => {
+    try {
+      if (!icon || typeof icon !== 'string' || icon.length > 500) return null;
+      if (icon.includes(' ') || icon.includes('&#') || icon.includes('<') || icon.includes('>')) return null;
+      const u = new URL(icon, baseUrl);
+      if (!['http:', 'https:'].includes(u.protocol)) return null;
+      return u.href;
+    } catch {
+      return null;
+    }
+  }).filter((icon): icon is string => {
+    if (!icon) return false;
+    const l = icon.toLowerCase();
+    return !l.endsWith('.ico') && !l.includes('.ico?') && !l.includes('favicon.ico');
+  });
+}
 
 app.post("/api/scrape-metadata", async (req: any, res) => {
   const { url, query } = req.body;
+  if (!url) return res.status(400).json({ error: "URL is required" });
+
+  let targetUrl = (url || '').trim();
+  if (!targetUrl.startsWith('http')) targetUrl = 'https://' + targetUrl;
+
+  const actualDomain = getActualDomain(targetUrl);
+  const actualBrand = getDomainBrand(targetUrl);
+
+  let pageTitle = '';
+  const hdIcons: string[] = [];
+  let baseUrl: URL;
   try {
-    let fetchUrl = url;
-    if (!fetchUrl.startsWith('http')) fetchUrl = 'https://' + fetchUrl;
-    
-    const response = await fetch(fetchUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
-      signal: AbortSignal.timeout(6000)
-    });
-    const html = await response.text();
-    const baseUrl = new URL(response.url);
-    
-    let title = '';
-    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-    if (titleMatch) title = titleMatch[1].trim();
-    if (!title) {
-       const ogTitleMatch = html.match(/<meta[^>]*property=["']?og:title["']?[^>]*content=["']([^"']+)["']/i);
-       if (ogTitleMatch) title = ogTitleMatch[1].trim();
-    }
-    
-    // Improve App Name Heuristics for Homelab / Generic titles
-    title = getBetterTitle(title, fetchUrl);
+    baseUrl = new URL(targetUrl);
+  } catch {
+    return res.status(400).json({ error: "Invalid URL" });
+  }
 
-    const icons = new Set<string>();
-
-    // 1. Extract link tags: apple-touch-icon, icon, mask-icon, manifest
-    const linkRegex = /<link[^>]+rel=["']?(?:shortcut icon|icon|apple-touch-icon|mask-icon)["']?[^>]*href=["']([^"'>\s]+)["']/gi;
-    let match;
-    while ((match = linkRegex.exec(html)) !== null) {
-      if (match[1] && !match[1].includes('&#')) icons.add(match[1]);
-    }
-    
-    // 2. OpenGraph / Twitter Image (non-greedy within a single meta tag)
-    const ogImageRegex1 = /<meta\s+[^>]*?(?:property|name)=["'](?:og:image|twitter:image|twitter:image:src)["'][^>]*?content=["']([^"'>\s]+)["'][^>]*>/gi;
-    const ogImageRegex2 = /<meta\s+[^>]*?content=["']([^"'>\s]+)["'][^>]*?(?:property|name)=["'](?:og:image|twitter:image|twitter:image:src)["'][^>]*>/gi;
-    while ((match = ogImageRegex1.exec(html)) !== null) {
-      if (match[1] && !match[1].includes('&#')) icons.add(match[1]);
-    }
-    while ((match = ogImageRegex2.exec(html)) !== null) {
-      if (match[1] && !match[1].includes('&#')) icons.add(match[1]);
-    }
-
-    // 3. Search site's HTML for logo/brand images and query matches
-    const imgRegex = /<img\s+[^>]*?src=["']([^"'>\s]+)["'][^>]*>/gi;
-    while ((match = imgRegex.exec(html)) !== null) {
-      const fullTag = match[0];
-      const src = match[1];
-      if (!src || src.startsWith('data:') || src.includes('&#')) continue;
-      const matchesSearch = query && query.trim() && new RegExp(query.trim(), 'i').test(fullTag);
-      const isLogoOrBrand = /logo|brand|icon|symbol|header-img|navbar-brand|site-logo/i.test(fullTag);
-      if (isLogoOrBrand || matchesSearch) {
-        icons.add(src);
-      }
-    }
-
-    // 4. Also check source tags inside picture or svg elements
-    const sourceRegex = /<source\s+[^>]*?srcset=["']([^"'>]+)["'][^>]*>/gi;
-    while ((match = sourceRegex.exec(html)) !== null) {
-      const rawSrc = match[1].split(',')[0].trim().split(' ')[0];
-      if (rawSrc && !rawSrc.includes('&#') && (/logo|brand|icon|symbol/i.test(match[0]) || (query && new RegExp(query.trim(), 'i').test(match[0])))) {
-        icons.add(rawSrc);
-      }
-    }
-
-    // Resolve relative paths to absolute URLs with strict validation
-    const resolvedIcons = Array.from(icons).map(icon => {
-      try {
-        if (!icon || typeof icon !== 'string' || icon.length > 500) return null;
-        if (icon.includes(' ') || icon.includes('&#') || icon.includes('<') || icon.includes('>')) return null;
-        const u = new URL(icon, baseUrl);
-        if (!['http:', 'https:'].includes(u.protocol)) return null;
-        return u.href;
-      } catch {
-        return null;
-      }
-    }).filter(Boolean) as string[];
-
-    // Filter out low-quality .ico files
-    const hdIcons = resolvedIcons.filter(icon => 
-      !icon.toLowerCase().endsWith('.ico') && 
-      !icon.toLowerCase().includes('.ico?') && 
-      !icon.toLowerCase().includes('favicon.ico')
-    );
-
-    // Google 128px high-res favicon (only if verified status 200 and not the 16x16 726-byte fallback globe)
+  const fetchAndScrape = async (fetchUrl: string) => {
     try {
-      const gUrl = `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${baseUrl.origin}&size=128`;
-      const gRes = await fetch(gUrl, { signal: AbortSignal.timeout(1500) });
-      if (gRes.ok) {
-        const gBuf = await gRes.arrayBuffer();
-        if (gBuf.byteLength > 800) {
-          hdIcons.push(gUrl);
+      const response = await fetch(fetchUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+        signal: AbortSignal.timeout(4500)
+      });
+      if (!response.ok) return null;
+      const html = await response.text();
+      const currentUrl = new URL(response.url);
+
+      let title = '';
+      const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+      if (titleMatch) title = titleMatch[1].trim();
+      if (!title) {
+        const ogTitleMatch = html.match(/<meta[^>]*property=["']?og:title["']?[^>]*content=["']([^"']+)["']/i);
+        if (ogTitleMatch) title = ogTitleMatch[1].trim();
+      }
+
+      const scraped = extractIconsFromHtml(html, currentUrl, query);
+      return { title, icons: scraped, url: currentUrl };
+    } catch {
+      return null;
+    }
+  };
+
+  // 1. Try fetching target URL
+  const targetResult = await fetchAndScrape(targetUrl);
+  if (targetResult) {
+    if (targetResult.title) pageTitle = targetResult.title;
+    hdIcons.push(...targetResult.icons);
+    baseUrl = targetResult.url;
+  }
+
+  // 2. Fetch actual root domain if target URL was a subdomain (like ibs.bankwest.com.au -> bankwest.com.au)
+  // or if target URL returned 0 logos or failed
+  if (actualDomain) {
+    const isSubdomain = baseUrl.hostname.toLowerCase() !== actualDomain.toLowerCase() && baseUrl.hostname.toLowerCase() !== `www.${actualDomain.toLowerCase()}`;
+    const needsDomainLogos = isSubdomain || hdIcons.length === 0;
+
+    if (needsDomainLogos) {
+      // Scrape actual domain (try www first, then apex)
+      const domainResults = await Promise.allSettled([
+        fetchAndScrape(`https://www.${actualDomain}/`),
+        fetchAndScrape(`https://${actualDomain}/`)
+      ]);
+      for (const r of domainResults) {
+        if (r.status === 'fulfilled' && r.value) {
+          if (!pageTitle && r.value.title) pageTitle = r.value.title;
+          hdIcons.push(...r.value.icons);
         }
       }
-    } catch {}
-
-    // Clean slugs for repository search
-    const finalTitle = getBetterTitle(title || '', baseUrl.href);
-    const domainPart = baseUrl.hostname.replace(/^www\./, '').split('.')[0];
-    const searchSlug = query ? query.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
-    const titleSlug = finalTitle ? finalTitle.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
-    const domainSlug = domainPart ? domainPart.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
-
-    const candidateSlugs = [...new Set([searchSlug, titleSlug, domainSlug].filter(s => s && s.length >= 3))];
-
-    // Add verified icons matching candidate slugs
-    for (const slug of candidateSlugs) {
-      const validWalkx = await getVerifiedWalkxcode(slug);
-      if (validWalkx.length > 0) {
-        hdIcons.unshift(...validWalkx);
-      }
-      if (simpleIconsSet.has(slug)) {
-        hdIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${slug}.svg`);
-      }
-      if (dashIconsSet.has(slug)) {
-        hdIcons.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${slug}.svg`);
-      }
     }
 
-    // If a search query was supplied, also find verified icons matching the search term!
-    if (query && query.trim()) {
-      const queryIcons = searchVerifiedIcons(query.trim(), 20);
-      hdIcons.unshift(...queryIcons);
-    }
-
-    // Check common high-res logo endpoints on the target domain
-    const commonPaths = [
-      '/logo.svg',
-      '/logo.png',
-      '/assets/logo.svg',
-      '/assets/logo.png',
-      '/images/logo.svg',
-      '/images/logo.png',
-      '/static/logo.svg'
+    // Google 128px high-res favicon for actual domain and www.actualDomain
+    const gUrls = [
+      `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${actualDomain}&size=128`,
+      `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://www.${actualDomain}&size=128`
     ];
-    if (query && query.trim()) {
-      commonPaths.push(`/${query.trim().toLowerCase()}.svg`, `/${query.trim().toLowerCase()}.png`);
+    if (baseUrl.origin && !baseUrl.origin.includes(actualDomain)) {
+      gUrls.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${baseUrl.origin}&size=128`);
     }
 
-    const probeResults = await Promise.allSettled(commonPaths.map(async p => {
+    await Promise.allSettled(gUrls.map(async gUrl => {
       try {
-        const full = new URL(p, baseUrl).href;
-        const res = await fetch(full, { method: 'HEAD', signal: AbortSignal.timeout(1500) });
-        if (res.ok) {
-          const type = res.headers.get('content-type') || '';
-          if (type.includes('image') || type.includes('svg')) {
-            return full;
+        const gRes = await fetch(gUrl, { signal: AbortSignal.timeout(1500) });
+        if (gRes.ok) {
+          const gBuf = await gRes.arrayBuffer();
+          // Filter out tiny 16x16 fallbacks (< 800 bytes)
+          if (gBuf.byteLength > 800) {
+            hdIcons.push(gUrl);
           }
         }
       } catch {}
-      return null;
     }));
 
-    probeResults.forEach(r => {
-      if (r.status === 'fulfilled' && r.value) {
-        hdIcons.unshift(r.value);
-      }
-    });
-
-    const finalIcons = [...new Set(hdIcons)];
-    if (finalIcons.length === 0) {
-      finalIcons.push('/default-globe.svg');
+    // Common logo paths on the actual domain
+    const probeDomains = [actualDomain, `www.${actualDomain}`];
+    if (isSubdomain && baseUrl.hostname) {
+      probeDomains.push(baseUrl.hostname);
     }
 
-    res.json({ 
-      title: finalTitle, 
-      icons: finalIcons,
-      siteUrl: baseUrl.href
-    });
-  } catch (err) {
-    try {
-      const u = new URL(url.startsWith('http') ? url : 'https://' + url);
-      const fallbackTitle = getBetterTitle('', u.href);
-      const fallbackIcons: string[] = [];
-      const domainPart = u.hostname.replace(/^www\./, '').split('.')[0];
-      const searchSlug = query ? query.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
-      const domainSlug = domainPart ? domainPart.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+    const commonPaths = [
+      '/logo.svg', '/logo.png', '/assets/logo.svg', '/assets/logo.png',
+      '/images/logo.svg', '/images/logo.png', '/static/logo.svg', '/static/logo.png',
+      '/favicon.png', '/apple-touch-icon.png'
+    ];
+    if (actualBrand) {
+      commonPaths.push(`/${actualBrand}.svg`, `/${actualBrand}.png`);
+    }
 
-      for (const slug of [...new Set([searchSlug, domainSlug].filter(s => s && s.length >= 3))]) {
-        const validWalkx = await getVerifiedWalkxcode(slug);
-        fallbackIcons.push(...validWalkx);
-        if (simpleIconsSet.has(slug)) {
-          fallbackIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${slug}.svg`);
-        }
-        if (dashIconsSet.has(slug)) {
-          fallbackIcons.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${slug}.svg`);
-        }
-      }
+    await Promise.allSettled(probeDomains.flatMap(d => 
+      commonPaths.map(async p => {
+        try {
+          const full = `https://${d}${p}`;
+          const res = await fetch(full, { method: 'HEAD', signal: AbortSignal.timeout(1500) });
+          if (res.ok) {
+            const type = res.headers.get('content-type') || '';
+            if (type.includes('image') || type.includes('svg')) {
+              hdIcons.unshift(full);
+            }
+          }
+        } catch {}
+      })
+    ));
+  }
 
-      if (query && query.trim()) {
-        const queryIcons = searchVerifiedIcons(query.trim(), 20);
-        fallbackIcons.unshift(...queryIcons);
-      }
-      
-      const verifiedFallbacks = [...new Set(fallbackIcons)];
-      if (verifiedFallbacks.length === 0) {
-        verifiedFallbacks.push('/default-globe.svg');
-      }
-      
-      res.json({
-        title: fallbackTitle,
-        icons: verifiedFallbacks,
-        siteUrl: u.href
-      });
-    } catch {
-       res.status(400).json({ error: "Invalid URL" });
+  // 3. Clean candidate slugs for repository search (Walkxcode, SimpleIcons, DashboardIcons)
+  const finalTitle = getBetterTitle(pageTitle || '', baseUrl.href);
+  const searchSlug = query ? query.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+  const titleSlug = finalTitle ? finalTitle.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+  const brandSlug = actualBrand ? actualBrand.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+  const domainPart = baseUrl.hostname.replace(/^www\./, '').split('.')[0];
+  const domainSlug = domainPart ? domainPart.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+
+  const candidateSlugs = [...new Set([brandSlug, searchSlug, titleSlug, domainSlug].filter(s => s && s.length >= 3))];
+
+  for (const slug of candidateSlugs) {
+    const validWalkx = await getVerifiedWalkxcode(slug);
+    if (validWalkx.length > 0) {
+      hdIcons.unshift(...validWalkx);
+    }
+    if (simpleIconsSet.has(slug)) {
+      hdIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${slug}.svg`);
+    }
+    if (dashIconsSet.has(slug)) {
+      hdIcons.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${slug}.svg`);
     }
   }
+
+  if (query && query.trim()) {
+    const queryIcons = searchVerifiedIcons(query.trim(), 20);
+    hdIcons.unshift(...queryIcons);
+  }
+
+  // Also include icon.horse for actual domain
+  if (actualDomain) {
+    hdIcons.push(`https://icon.horse/icon/${actualDomain}`);
+  }
+
+  const finalIcons = [...new Set(hdIcons)].filter(ico => 
+    ico && 
+    !ico.toLowerCase().endsWith('.ico') && 
+    !ico.toLowerCase().includes('.ico?') && 
+    !ico.toLowerCase().includes('favicon.ico')
+  );
+
+  if (finalIcons.length === 0) {
+    finalIcons.push('/default-globe.svg');
+  }
+
+  return res.json({
+    title: finalTitle,
+    icons: finalIcons,
+    siteUrl: baseUrl.href
+  });
 });
 
 // Real-time verified icon catalog search endpoint

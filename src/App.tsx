@@ -6,6 +6,7 @@ import { ShortcutItem } from './types';
 import { AuthContext } from './Auth.tsx';
 import { popularApps } from './data';
 import { StartarrLogo } from './components/StartarrLogo';
+import { getActualDomain, getDomainBrand } from './utils/domain';
 
 type LayoutSize = 'small' | 'medium' | 'large';
 
@@ -170,7 +171,8 @@ export default function App() {
        if (imgEl && imgWrapperEl) {
           const defaultIcon = '/default-globe.svg';
           const domain = (() => { try { return new URL(item.url).hostname; } catch { return ''; } })();
-          const primaryIcon = item.iconUrl || (domain ? `https://icon.horse/icon/${domain}` : defaultIcon);
+          const actualDomain = (() => { try { return getActualDomain(item.url); } catch { return ''; } })();
+          const primaryIcon = item.iconUrl || (actualDomain ? `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${actualDomain}&size=128` : (domain ? `https://icon.horse/icon/${domain}` : defaultIcon));
           
           if (updates.iconUrl !== undefined || updates.url !== undefined || updates.title !== undefined) {
              imgEl.src = item.iconUrl || primaryIcon;
@@ -984,6 +986,10 @@ export default function App() {
   const getFaviconUrl = (url: string) => {
     try {
       const domain = new URL(url).hostname;
+      const actualDomain = getActualDomain(url);
+      if (actualDomain) {
+        return `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${actualDomain}&size=128`;
+      }
       return domain ? `https://icon.horse/icon/${domain}` : '/default-globe.svg';
     } catch {
       return '/default-globe.svg';
@@ -1028,7 +1034,8 @@ export default function App() {
     } else {
       const defaultIcon = '/default-globe.svg';
       const domain = (() => { try { return new URL(item.url).hostname; } catch { return ''; } })();
-      const primaryIcon = item.iconUrl || (domain ? `https://icon.horse/icon/${domain}` : defaultIcon);
+      const actualDomain = (() => { try { return getActualDomain(item.url); } catch { return ''; } })();
+      const primaryIcon = item.iconUrl || (actualDomain ? `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${actualDomain}&size=128` : (domain ? `https://icon.horse/icon/${domain}` : defaultIcon));
       const iconUrl = primaryIcon;
       
       const onloadAttr = `onload="if((this.naturalWidth > 0 && this.naturalWidth < 48) || this.naturalHeight < 48) { this.onerror=null; this.src='${defaultIcon}'; }"`;
@@ -1183,12 +1190,14 @@ export default function App() {
   const handleAddShortcut = (app: {title: string, url: string, iconUrl?: string}) => {
     if (!gridInstance.current) return;
     
+    const resolvedIcon = app.iconUrl || getFaviconUrl(app.url);
+    const resolvedTitle = app.title || getDomainBrand(app.url) || 'App';
     const newItem: ShortcutItem = {
       id: Math.random().toString(36).substring(2, 9),
       type: 'app',
-      title: app.title,
+      title: resolvedTitle,
       url: app.url,
-      iconUrl: app.iconUrl,
+      iconUrl: resolvedIcon,
       w: 1,
       h: 8,
     };
@@ -1202,6 +1211,29 @@ export default function App() {
     addWidgetToGrid(newItem);
     setSearchQuery('');
     
+    // Background metadata check to enhance shortcut with high-res SVG or official brand logo from actual domain
+    if (app.url && app.url.startsWith('http')) {
+      fetch('/api/scrape-metadata', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: app.url, query: resolvedTitle })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data && Array.isArray(data.icons) && data.icons.length > 0) {
+          const bestIcon = data.icons.find((i: string) => i.endsWith('.svg') || i.endsWith('.png')) || data.icons[0];
+          if (bestIcon && bestIcon !== '/default-globe.svg' && (!app.iconUrl || app.iconUrl.includes('gstatic') || app.iconUrl.includes('icon.horse'))) {
+            updateShortcutDynamically(newItem.id, {
+              iconUrl: bestIcon,
+              ...((!app.title || app.title.toLowerCase().includes('ibs')) && data.title ? { title: data.title } : {})
+            });
+          }
+        }
+      })
+      .catch(() => {});
+    }
+
     setTimeout(() => {
       saveGridState();
     }, 100);
@@ -1246,7 +1278,7 @@ export default function App() {
       if (filteredApps.length > 0) {
         handleAddShortcut(filteredApps[highlightedIndex]);
       } else if (searchResults.length > 0) {
-        handleAddShortcut({ title: searchResults[highlightedIndex].title, url: searchResults[highlightedIndex].url, iconUrl: '' });
+        handleAddShortcut({ title: searchResults[highlightedIndex].title, url: searchResults[highlightedIndex].url, iconUrl: getFaviconUrl(searchResults[highlightedIndex].url) });
       } else if (searchQuery.trim().length > 0 && searchQuery.includes('.')) {
         const query = searchQuery.trim();
         const formattedUrl = /^https?:\/\//i.test(query) ? query : 'https://' + query;
@@ -1566,7 +1598,7 @@ export default function App() {
                             : 'text-neutral-400 hover:bg-neutral-800 hover:text-white border-l-2 border-transparent'
                         }`}
                         onMouseEnter={() => setHighlightedIndex(idx)}
-                        onMouseDown={(e) => { e.preventDefault(); handleAddShortcut({ title: res.title, url: res.url, iconUrl: '' }); }}
+                        onMouseDown={(e) => { e.preventDefault(); handleAddShortcut({ title: res.title, url: res.url, iconUrl: getFaviconUrl(res.url) }); }}
                       >
                         <div className="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center flex-shrink-0 overflow-hidden">
                            <img 
@@ -1955,6 +1987,9 @@ export default function App() {
                   } catch(e) {}
                   if (!domain) return null;
                   
+                  const actualDomain = getActualDomain(contextMenu.shortcut.url);
+                  const actualBrand = getDomainBrand(contextMenu.shortcut.url);
+
                   const rawTitle = contextMenu.shortcut.title || '';
                   const domainClean = domain.replace(/^www\./, '').split('.')[0] || '';
                   // Clean rawTitle to strip subheadings like " – log in or sign up"
@@ -1962,9 +1997,11 @@ export default function App() {
                   const slug1 = cleanTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
                   const slug2 = cleanTitle.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
                   const slug3 = domainClean.toLowerCase().replace(/[^a-z0-9]/g, '');
+                  const slug4 = actualBrand.toLowerCase().replace(/[^a-z0-9]/g, '');
+                  const slug5 = actualDomain ? actualDomain.replace(/[^a-z0-9]/g, '') : '';
 
                   // STRICT: Slugs must have length >= 3 to prevent single-letter collisions like 'c' matching Coinbase!
-                  const slugs = [...new Set([slug1, slug2, slug3].filter(s => s && s.length >= 3))];
+                  const slugs = [...new Set([slug1, slug2, slug3, slug4, slug5].filter(s => s && s.length >= 3))];
                   
                   let candidateIcons: string[] = [];
 
@@ -1981,13 +2018,21 @@ export default function App() {
                     if (contextMenu.extraIcons && contextMenu.extraIcons.length > 0) {
                       defaults.push(...contextMenu.extraIcons);
                     }
+                    if (actualDomain) {
+                      defaults.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${actualDomain}&size=128`);
+                      defaults.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://www.${actualDomain}&size=128`);
+                      defaults.push(`https://icon.horse/icon/${actualDomain}`);
+                    }
+                    if (domain && domain !== actualDomain && domain !== `www.${actualDomain}`) {
+                      defaults.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`);
+                      defaults.push(`https://icon.horse/icon/${domain}`);
+                    }
                     for (const s of slugs) {
                       defaults.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${s}.svg`);
                       defaults.push(`https://cdn.simpleicons.org/${s}`);
                       defaults.push(`https://cdn.simpleicons.org/${s}/white`);
                       defaults.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${s}.png`);
                     }
-                    defaults.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`);
                     candidateIcons = defaults;
                   }
 
