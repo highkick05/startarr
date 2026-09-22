@@ -40,6 +40,83 @@ const PRESET_BACKGROUNDS = [
   { id: 'preset-matrix-code', name: 'Matrix Rain', url: '/backgrounds/matrix-code.jpg' },
 ];
 
+export const isMonochromeOrBlackIcon = (url?: string): boolean => {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return lower.includes('jsdelivr.net/npm/simple-icons') || 
+         lower.includes('/simple-icons@') || 
+         lower.includes('/simple-icons/') ||
+         lower.includes('/white') || 
+         lower.includes('/000000') ||
+         lower.includes('/black');
+};
+
+export const getFaviconUrl = (url: string) => {
+  try {
+    const domain = new URL(url).hostname;
+    const actualDomain = getActualDomain(url);
+    if (actualDomain) {
+      return `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${actualDomain}&size=128`;
+    }
+    return domain ? `https://icon.horse/icon/${domain}` : '/default-globe.svg';
+  } catch {
+    return '/default-globe.svg';
+  }
+};
+
+export const pickBestColouredIcon = (icons: string[], url?: string): string => {
+  if (!icons || icons.length === 0) {
+    return url ? getFaviconUrl(url) : '/default-globe.svg';
+  }
+
+  const valid = icons.filter(i => i && i !== '/default-globe.svg' && !i.includes('default-globe.svg'));
+  const coloured = valid.filter(i => !isMonochromeOrBlackIcon(i));
+
+  if (coloured.length > 0) {
+    // 1. Walkxcode dashboard colored vector / PNG
+    const walkxSvg = coloured.find(i => i.includes('walkxcode/dashboard-icons') && i.endsWith('.svg'));
+    if (walkxSvg) return walkxSvg;
+
+    const walkxPng = coloured.find(i => i.includes('walkxcode/dashboard-icons') && i.endsWith('.png'));
+    if (walkxPng) return walkxPng;
+
+    // 2. SimpleIcons official brand-color vector
+    const simpleColoured = coloured.find(i => i.includes('cdn.simpleicons.org') && !isMonochromeOrBlackIcon(i));
+    if (simpleColoured) return simpleColoured;
+
+    // 3. High-res site logo or apple touch icon
+    const siteLogo = coloured.find(i => 
+      (i.includes('logo') || i.includes('apple-touch-icon') || i.includes('brand')) && 
+      !i.toLowerCase().endsWith('.ico')
+    );
+    if (siteLogo) return siteLogo;
+
+    // 4. Authentic domain social favicon (128px)
+    const gFavicon = coloured.find(i => i.includes('gstatic.com/faviconV2'));
+    if (gFavicon) return gFavicon;
+
+    // 5. icon.horse domain icon
+    const horse = coloured.find(i => i.includes('icon.horse'));
+    if (horse) return horse;
+
+    // 6. First non-ico colored candidate
+    const nonIco = coloured.find(i => !i.toLowerCase().endsWith('.ico'));
+    if (nonIco) return nonIco;
+
+    return coloured[0];
+  }
+
+  // If only black/white icons exist in candidate list, fall back to high-res domain favicon instead of black
+  if (url) {
+    const favicon = getFaviconUrl(url);
+    if (favicon && favicon !== '/default-globe.svg' && !isMonochromeOrBlackIcon(favicon)) {
+      return favicon;
+    }
+  }
+
+  return valid[0] || '/default-globe.svg';
+};
+
 export default function App() {
   const { user, logout } = React.useContext(AuthContext);
   const [dataLoaded, setDataLoaded] = useState(false);
@@ -76,6 +153,10 @@ export default function App() {
             setShortcuts(parsed.filter((p: any) => !!p).map((p: any) => ({
               ...p,
               w: p?.type === 'app' ? 1 : p?.w,
+              // If an app shortcut was previously automatically assigned a black unstyled logo, heal it to authentic colored logo:
+              iconUrl: (p?.type === 'app' && isMonochromeOrBlackIcon(p?.iconUrl))
+                ? (getFaviconUrl(p?.url) || p?.iconUrl)
+                : p?.iconUrl,
               // Multiply h by 8 if it's the old 1x format. 
               // We assume old apps have h:1. Old containers have h:2 or 3.
               // New apps will have h:8.
@@ -985,19 +1066,6 @@ export default function App() {
     });
   };
 
-  const getFaviconUrl = (url: string) => {
-    try {
-      const domain = new URL(url).hostname;
-      const actualDomain = getActualDomain(url);
-      if (actualDomain) {
-        return `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${actualDomain}&size=128`;
-      }
-      return domain ? `https://icon.horse/icon/${domain}` : '/default-globe.svg';
-    } catch {
-      return '/default-globe.svg';
-    }
-  };
-
   const addWidgetToGrid = (item: ShortcutItem, targetGrid?: any) => {
     const grid = targetGrid || gridInstance.current;
     if (!grid) return;
@@ -1224,8 +1292,8 @@ export default function App() {
       .then(res => res.json())
       .then(data => {
         if (data && Array.isArray(data.icons) && data.icons.length > 0) {
-          const bestIcon = data.icons.find((i: string) => i.endsWith('.svg') || i.endsWith('.png')) || data.icons[0];
-          if (bestIcon && bestIcon !== '/default-globe.svg' && (!app.iconUrl || app.iconUrl.includes('gstatic') || app.iconUrl.includes('icon.horse'))) {
+          const bestIcon = pickBestColouredIcon(data.icons, app.url);
+          if (bestIcon && bestIcon !== '/default-globe.svg' && !isMonochromeOrBlackIcon(bestIcon)) {
             updateShortcutDynamically(newItem.id, {
               iconUrl: bestIcon,
               ...((!app.title || app.title.toLowerCase().includes('ibs')) && data.title ? { title: data.title } : {})
@@ -1290,14 +1358,14 @@ export default function App() {
 
         const newId = 'shortcut_' + Date.now();
         const fallbackDomain = (() => { try { return new URL(formattedUrl).hostname; } catch { return formattedUrl; } })();
-        const horseIcon = `https://icon.horse/icon/${fallbackDomain}`;
+        const initialIcon = getFaviconUrl(formattedUrl);
         
         const newItem = {
           id: newId,
           type: 'app' as const,
-          title: fallbackDomain,
+          title: getDomainBrand(formattedUrl) || fallbackDomain,
           url: formattedUrl,
-          iconUrl: horseIcon,
+          iconUrl: initialIcon,
           w: 1, h: 8
         };
 
@@ -1318,12 +1386,12 @@ export default function App() {
         })
         .then(res => res.json())
         .then(data => {
-          let chosenIcon = data.icons?.[0];
-          let updatedTitle = (data.title && data.title.trim() && data.title !== 'error') ? data.title.trim() : fallbackDomain;
+          let chosenIcon = (data.icons && data.icons.length > 0) ? pickBestColouredIcon(data.icons, formattedUrl) : initialIcon;
+          let updatedTitle = (data.title && data.title.trim() && data.title !== 'error') ? data.title.trim() : (getDomainBrand(formattedUrl) || fallbackDomain);
           
           updateShortcutDynamically(newId, {
              title: updatedTitle,
-             iconUrl: chosenIcon || horseIcon
+             iconUrl: chosenIcon
           });
         })
         .catch(err => console.error("Failed to add custom shortcut", err));
@@ -1495,14 +1563,14 @@ export default function App() {
 
                         const newId = 'shortcut_' + Date.now();
                         const fallbackDomain = (() => { try { return new URL(formattedUrl).hostname; } catch { return formattedUrl; } })();
-                        const defaultGlobe = '/default-globe.svg';
+                        const initialIcon = getFaviconUrl(formattedUrl);
                         
                         const newItem = {
                           id: newId,
                           type: 'app' as const,
-                          title: fallbackDomain,
+                          title: getDomainBrand(formattedUrl) || fallbackDomain,
                           url: formattedUrl,
-                          iconUrl: defaultGlobe,
+                          iconUrl: initialIcon,
                           w: 1, h: 8
                         };
 
@@ -1523,12 +1591,12 @@ export default function App() {
                         })
                         .then(res => res.json())
                         .then(data => {
-                          let chosenIcon = data.icons?.[0];
-                          let updatedTitle = (data.title && data.title.trim() && data.title !== 'error') ? data.title.trim() : fallbackDomain;
+                          let chosenIcon = (data.icons && data.icons.length > 0) ? pickBestColouredIcon(data.icons, formattedUrl) : initialIcon;
+                          let updatedTitle = (data.title && data.title.trim() && data.title !== 'error') ? data.title.trim() : (getDomainBrand(formattedUrl) || fallbackDomain);
                           
                           updateShortcutDynamically(newId, {
                              title: updatedTitle,
-                             iconUrl: chosenIcon || defaultGlobe
+                             iconUrl: chosenIcon
                           });
                         })
                         .catch(err => console.error("Failed to add custom shortcut", err));
@@ -2032,14 +2100,15 @@ export default function App() {
                     for (const s of slugs) {
                       defaults.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${s}.svg`);
                       defaults.push(`https://cdn.simpleicons.org/${s}`);
-                      defaults.push(`https://cdn.simpleicons.org/${s}/white`);
                       defaults.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${s}.png`);
+                      defaults.push(`https://cdn.simpleicons.org/${s}/white`);
+                      defaults.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${s}.svg`);
                     }
                     candidateIcons = defaults;
                   }
 
                   // Strict filter: NEVER include default globe icon; exclude .ico files and URLs that failed to load
-                  const displayedIcons = [...new Set(candidateIcons)].filter(ico => 
+                  const validRaw = [...new Set(candidateIcons)].filter(ico => 
                     ico &&
                     ico !== '/default-globe.svg' &&
                     !ico.includes('default-globe.svg') &&
@@ -2048,6 +2117,11 @@ export default function App() {
                     !ico.toLowerCase().includes('.ico?') && 
                     !ico.toLowerCase().includes('favicon.ico')
                   );
+
+                  // Always show HQ coloured and original logos first; custom monochrome (black/white) variants at the end
+                  const colouredOptions = validRaw.filter(ico => !isMonochromeOrBlackIcon(ico));
+                  const monoOptions = validRaw.filter(ico => isMonochromeOrBlackIcon(ico));
+                  const displayedIcons = [...colouredOptions, ...monoOptions];
                   
                   return (
                     <div className="flex flex-col space-y-2 mt-3">

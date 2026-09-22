@@ -1,37 +1,4 @@
 import express from "express";
-async function getVerifiedWalkxcode(title: string) {
-  if (!title || title.trim().length < 3) return [];
-  const words = title.split(/[\s\|]+/).filter(w => w.length >= 3);
-  words.unshift(title.trim()); // Try full string first
-  
-  // Build a list of potential sanitizations
-  const candidates = new Set<string>();
-  
-  for (const word of words) {
-    const dashed = word.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    const squished = word.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (dashed && dashed.length >= 3) candidates.add(dashed);
-    if (squished && squished.length >= 3) candidates.add(squished);
-  }
-
-  for (const sanitized of candidates) {
-    try {
-      const svgUrl = `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${sanitized}.svg`;
-      const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), 1200);
-      const res = await fetch(svgUrl, { method: 'HEAD', signal: controller.signal });
-      clearTimeout(id);
-      
-      if (res.ok) {
-        return [svgUrl, `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${sanitized}.png`];
-      }
-    } catch (e) {
-      // ignore
-    }
-  }
-  return [];
-}
-
 import path from "path";
 import fs from "fs";
 import multer from "multer";
@@ -78,12 +45,57 @@ try {
   console.error("Error reading icon catalogs:", e);
 }
 
+async function getVerifiedWalkxcode(title: string) {
+  if (!title || title.trim().length < 3) return [];
+  const words = title.split(/[\s\|]+/).filter(w => w.length >= 3);
+  words.unshift(title.trim()); // Try full string first
+  
+  // Build a list of potential sanitizations
+  const candidates = new Set<string>();
+  
+  for (const word of words) {
+    const dashed = word.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const squished = word.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (dashed && dashed.length >= 3) candidates.add(dashed);
+    if (squished && squished.length >= 3) candidates.add(squished);
+  }
+
+  // 1. Instant check against local dashboard-icons catalog
+  for (const sanitized of candidates) {
+    if (dashIconsSet.has(sanitized)) {
+      return [
+        `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${sanitized}.svg`,
+        `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${sanitized}.png`
+      ];
+    }
+  }
+
+  // 2. Network HEAD check
+  for (const sanitized of candidates) {
+    try {
+      const svgUrl = `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${sanitized}.svg`;
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 1200);
+      const res = await fetch(svgUrl, { method: 'HEAD', signal: controller.signal });
+      clearTimeout(id);
+      
+      if (res.ok) {
+        return [svgUrl, `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${sanitized}.png`];
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  return [];
+}
+
 function searchVerifiedIcons(query: string, limit = 40): string[] {
   if (!query || !query.trim()) return [];
   const q = query.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
   if (!q) return [];
   
   const results: string[] = [];
+  const monoResults: string[] = [];
   const seen = new Set<string>();
 
   const addDash = (item: string) => {
@@ -100,17 +112,23 @@ function searchVerifiedIcons(query: string, limit = 40): string[] {
   };
 
   const addSimple = (item: string) => {
-    // 1. Official Brand Color vector (e.g. NBA blue, Spotify green, YouTube red)
+    // 1. Official Brand Color vector (priority HQ colored)
     const colorUrl = `https://cdn.simpleicons.org/${item}`;
     if (!seen.has(colorUrl)) {
       seen.add(colorUrl);
       results.push(colorUrl);
     }
-    // 2. High-contrast White vector (perfect for dark themes / wallpapers)
+    // 2. High-contrast White vector (custom variant)
     const whiteUrl = `https://cdn.simpleicons.org/${item}/white`;
     if (!seen.has(whiteUrl)) {
       seen.add(whiteUrl);
-      results.push(whiteUrl);
+      monoResults.push(whiteUrl);
+    }
+    // 3. Black vector (custom variant)
+    const blackUrl = `https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${item}.svg`;
+    if (!seen.has(blackUrl)) {
+      seen.add(blackUrl);
+      monoResults.push(blackUrl);
     }
   };
 
@@ -185,7 +203,8 @@ function searchVerifiedIcons(query: string, limit = 40): string[] {
     }
   }
 
-  return results.slice(0, limit);
+  // Always return HQ coloured logos first, then white/black custom variants
+  return [...results, ...monoResults].slice(0, limit);
 }
 
 const storage = multer.diskStorage({
@@ -639,10 +658,15 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
       hdIcons.unshift(...validWalkx);
     }
     if (simpleIconsSet.has(slug)) {
+      // 1. Official Brand Color vector (priority HQ colored)
+      hdIcons.push(`https://cdn.simpleicons.org/${slug}`);
+      // 2. Custom white and black variants available for user choice in gallery/search
+      hdIcons.push(`https://cdn.simpleicons.org/${slug}/white`);
       hdIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${slug}.svg`);
     }
     if (dashIconsSet.has(slug)) {
       hdIcons.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${slug}.svg`);
+      hdIcons.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${slug}.png`);
     }
   }
 
@@ -656,12 +680,30 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
     hdIcons.push(`https://icon.horse/icon/${actualDomain}`);
   }
 
-  const finalIcons = [...new Set(hdIcons)].filter(ico => 
+  const isMonochrome = (url: string) => {
+    const lower = url.toLowerCase();
+    return lower.includes('jsdelivr.net/npm/simple-icons') || 
+           lower.includes('/simple-icons@') || 
+           lower.includes('/simple-icons/') ||
+           lower.includes('/white') || 
+           lower.includes('/000000') ||
+           lower.includes('/black');
+  };
+
+  const rawIcons = [...new Set(hdIcons)].filter(ico => 
     ico && 
+    ico !== '/default-globe.svg' &&
+    !ico.includes('default-globe.svg') &&
     !ico.toLowerCase().endsWith('.ico') && 
     !ico.toLowerCase().includes('.ico?') && 
     !ico.toLowerCase().includes('favicon.ico')
   );
+
+  // Partition: ALL HQ coloured and original logos first, custom monochrome (black & white) variants at the end
+  const colouredIcons = rawIcons.filter(ico => !isMonochrome(ico));
+  const customMonoIcons = rawIcons.filter(ico => isMonochrome(ico));
+
+  const finalIcons = [...colouredIcons, ...customMonoIcons];
 
   return res.json({
     title: finalTitle,
