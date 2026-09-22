@@ -49,6 +49,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "super_secret_jwt_key_12345";
 app.use(express.json({ limit: '250mb' }));
 app.use(express.urlencoded({ limit: '250mb', extended: true }));
 app.use(cookieParser());
+app.use(express.static(path.join(process.cwd(), "public")));
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(UPLOADS_DIR)) {
@@ -387,8 +388,17 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
       !icon.toLowerCase().includes('favicon.ico')
     );
 
-    // Google 128px high-res favicon
-    hdIcons.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${baseUrl.origin}&size=128`);
+    // Google 128px high-res favicon (only if verified status 200 and not the 16x16 726-byte fallback globe)
+    try {
+      const gUrl = `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${baseUrl.origin}&size=128`;
+      const gRes = await fetch(gUrl, { signal: AbortSignal.timeout(1500) });
+      if (gRes.ok) {
+        const gBuf = await gRes.arrayBuffer();
+        if (gBuf.byteLength > 800) {
+          hdIcons.push(gUrl);
+        }
+      }
+    } catch {}
 
     // Clean slugs for repository search
     const finalTitle = getBetterTitle(title || '', baseUrl.href);
@@ -442,9 +452,14 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
       }
     });
 
+    const finalIcons = [...new Set(hdIcons)];
+    if (finalIcons.length === 0) {
+      finalIcons.push('/default-globe.svg');
+    }
+
     res.json({ 
       title: finalTitle, 
-      icons: [...new Set(hdIcons)],
+      icons: finalIcons,
       siteUrl: baseUrl.href
     });
   } catch (err) {
@@ -462,11 +477,15 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
         fallbackIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${slug}.svg`);
         fallbackIcons.push(`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${slug}.svg`);
       }
-      fallbackIcons.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${u.origin}&size=128`);
+      
+      const verifiedFallbacks = [...new Set(fallbackIcons)];
+      if (verifiedFallbacks.length === 0) {
+        verifiedFallbacks.push('/default-globe.svg');
+      }
       
       res.json({
         title: fallbackTitle,
-        icons: [...new Set(fallbackIcons)],
+        icons: verifiedFallbacks,
         siteUrl: u.href
       });
     } catch {

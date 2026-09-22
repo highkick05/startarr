@@ -94,6 +94,21 @@ export default function App() {
     }).catch(console.error);
   }, []);
 
+  // Automatically upgrade any low-res / pixelated icons (like 16x16 gstatic globe) to the crisp vector globe
+  useEffect(() => {
+    const upgradeLowRes = () => {
+      document.querySelectorAll('.grid-stack-item img').forEach((img: any) => {
+        if (img.naturalWidth > 0 && (img.naturalWidth < 48 || img.naturalHeight < 48)) {
+          img.src = '/default-globe.svg';
+        }
+      });
+    };
+    const t1 = setTimeout(upgradeLowRes, 400);
+    const t2 = setTimeout(upgradeLowRes, 1200);
+    const t3 = setTimeout(upgradeLowRes, 3000);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [shortcuts]);
+
   const gridContainerRef = useRef<HTMLDivElement>(null);
 
     // Absolute fallback: globally observe for dragged items
@@ -168,20 +183,14 @@ export default function App() {
        const imgWrapperEl = el.querySelector('.flex-1 > div');
        const imgEl = el.querySelector('img');
        if (imgEl && imgWrapperEl) {
+          const defaultIcon = '/default-globe.svg';
           const domain = (() => { try { return new URL(item.url).hostname; } catch { return ''; } })();
-          const fallbackIcon = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.title || 'Unknown')}&background=262626&color=fff&size=128`;
-          const googleIcon = domain ? `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128` : fallbackIcon;
-          const primaryIcon = domain ? `https://icon.horse/icon/${domain}` : googleIcon;
+          const primaryIcon = item.iconUrl || (domain ? `https://icon.horse/icon/${domain}` : defaultIcon);
           
           if (updates.iconUrl !== undefined || updates.url !== undefined || updates.title !== undefined) {
              imgEl.src = item.iconUrl || primaryIcon;
-             if (item.iconUrl) {
-                imgEl.removeAttribute('onload');
-                imgEl.setAttribute('onerror', `this.onerror=null; this.src='${googleIcon}';`);
-             } else {
-                imgEl.setAttribute('onload', `if(this.naturalWidth < 64 && !this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.naturalWidth < 64 && this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; }`);
-                imgEl.setAttribute('onerror', `if(!this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; } else { this.onerror=null; }`);
-             }
+             imgEl.setAttribute('onload', `if((this.naturalWidth > 0 && this.naturalWidth < 48) || this.naturalHeight < 48) { this.onerror=null; this.src='${defaultIcon}'; }`);
+             imgEl.setAttribute('onerror', `this.onerror=null; this.src='${defaultIcon}';`);
              imgEl.dataset.fallback = '0';
           }
           if (updates.invertIcon !== undefined) {
@@ -890,9 +899,9 @@ export default function App() {
   const getFaviconUrl = (url: string) => {
     try {
       const domain = new URL(url).hostname;
-      return `https://icon.horse/icon/${domain}`;
+      return domain ? `https://icon.horse/icon/${domain}` : '/default-globe.svg';
     } catch {
-      return '';
+      return '/default-globe.svg';
     }
   };
 
@@ -932,16 +941,13 @@ export default function App() {
         </div>
       `;
     } else {
+      const defaultIcon = '/default-globe.svg';
       const domain = (() => { try { return new URL(item.url).hostname; } catch { return ''; } })();
-      const fallbackIcon = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.title || 'Unknown')}&background=262626&color=fff&size=128`;
-      const googleIcon = domain ? `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128` : fallbackIcon;
-      const primaryIcon = domain ? `https://icon.horse/icon/${domain}` : googleIcon;
-      const iconUrl = item.iconUrl || primaryIcon;
+      const primaryIcon = item.iconUrl || (domain ? `https://icon.horse/icon/${domain}` : defaultIcon);
+      const iconUrl = primaryIcon;
       
-      const onloadAttr = item.iconUrl ? '' : `onload="if(this.naturalWidth < 64 && !this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.naturalWidth < 64 && this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; }"`;
-      const onerrorAttr = item.iconUrl 
-        ? `onerror="this.onerror=null; this.src='${googleIcon}';"`
-        : `onerror="if(!this.dataset.fallback) { this.dataset.fallback='1'; this.src='${googleIcon}'; } else if (this.dataset.fallback === '1') { this.dataset.fallback='2'; this.src='${fallbackIcon}'; } else { this.onerror=null; }"`;
+      const onloadAttr = `onload="if((this.naturalWidth > 0 && this.naturalWidth < 48) || this.naturalHeight < 48) { this.onerror=null; this.src='${defaultIcon}'; }"`;
+      const onerrorAttr = `onerror="this.onerror=null; this.src='${defaultIcon}';"`;
 
       htmlContent = `
         <div class="grid-stack-item-content relative group flex flex-col items-center justify-center cursor-grab active:cursor-grabbing transition-transform duration-300 hover:scale-105 hover:bg-neutral-800/30 rounded-2xl"
@@ -1370,14 +1376,14 @@ export default function App() {
 
                         const newId = 'shortcut_' + Date.now();
                         const fallbackDomain = (() => { try { return new URL(formattedUrl).hostname; } catch { return formattedUrl; } })();
-                        const horseIcon = `https://icon.horse/icon/${fallbackDomain}`;
+                        const defaultGlobe = '/default-globe.svg';
                         
                         const newItem = {
                           id: newId,
                           type: 'app' as const,
                           title: fallbackDomain,
                           url: formattedUrl,
-                          iconUrl: horseIcon,
+                          iconUrl: defaultGlobe,
                           w: 1, h: 8
                         };
 
@@ -1403,7 +1409,7 @@ export default function App() {
                           
                           updateShortcutDynamically(newId, {
                              title: updatedTitle,
-                             iconUrl: chosenIcon || horseIcon
+                             iconUrl: chosenIcon || defaultGlobe
                           });
                         })
                         .catch(err => console.error("Failed to add custom shortcut", err));
@@ -1440,20 +1446,17 @@ export default function App() {
                         <div className="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center flex-shrink-0 overflow-hidden">
                            <img 
                              src={app.iconUrl || getFaviconUrl(app.url)} 
+                             onLoad={(e) => {
+                               const target = e.currentTarget;
+                               if (target.naturalWidth > 0 && target.naturalWidth < 48) {
+                                 target.onerror = null;
+                                 target.src = '/default-globe.svg';
+                               }
+                             }}
                              onError={(e) => {
                                const target = e.currentTarget;
-                               try {
-                                 const domain = new URL(app.url).hostname;
-                                 if (target.dataset.fallback === '1') {
-                                   target.onerror = null;
-                                   target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(app.title || 'U')}&background=262626&color=fff&size=64`;
-                                 } else {
-                                   target.dataset.fallback = '1';
-                                   target.src = `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`;
-                                 }
-                               } catch {
-                                 target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(app.title || 'U')}&background=262626&color=fff&size=64`;
-                               }
+                               target.onerror = null;
+                               target.src = '/default-globe.svg';
                              }}
                              className="w-full h-full object-cover"
                              alt=""
@@ -1483,20 +1486,17 @@ export default function App() {
                         <div className="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center flex-shrink-0 overflow-hidden">
                            <img 
                              src={getFaviconUrl(res.url)}
+                             onLoad={(e) => {
+                               const target = e.currentTarget;
+                               if (target.naturalWidth > 0 && target.naturalWidth < 48) {
+                                 target.onerror = null;
+                                 target.src = '/default-globe.svg';
+                               }
+                             }}
                              onError={(e) => {
                                const target = e.currentTarget;
-                               try {
-                                 const domain = new URL(res.url).hostname;
-                                 if (target.dataset.fallback === '1') {
-                                   target.onerror = null;
-                                   target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(res.title || 'U')}&background=262626&color=fff&size=64`;
-                                 } else {
-                                   target.dataset.fallback = '1';
-                                   target.src = `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`;
-                                 }
-                               } catch {
-                                 target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(res.title || 'U')}&background=262626&color=fff&size=64`;
-                               }
+                               target.onerror = null;
+                               target.src = '/default-globe.svg';
                              }}
                              className="w-full h-full object-cover"
                              alt=""
@@ -1808,20 +1808,17 @@ export default function App() {
                         backgroundColor: contextMenu.shortcut.iconBackground === 'white' ? 'white' : contextMenu.shortcut.iconBackground === 'black' ? 'black' : 'transparent',
                         padding: contextMenu.shortcut.iconBackground === 'white' || contextMenu.shortcut.iconBackground === 'black' ? '2px' : '0'
                       }} 
+                      onLoad={(e) => {
+                        const target = e.currentTarget;
+                        if (target.naturalWidth > 0 && target.naturalWidth < 48) {
+                          target.onerror = null;
+                          target.src = '/default-globe.svg';
+                        }
+                      }}
                       onError={(e) => { 
                         const target = e.currentTarget;
-                        try {
-                          const domain = new URL(contextMenu.shortcut.url).hostname;
-                          if (target.dataset.fallback === '1') {
-                            target.onerror = null;
-                            target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(contextMenu.shortcut?.title || 'U')}&background=262626&color=fff&size=64`;
-                          } else {
-                            target.dataset.fallback = '1';
-                            target.src = `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`;
-                          }
-                        } catch {
-                          target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(contextMenu.shortcut?.title || 'U')}&background=262626&color=fff&size=64`;
-                        }
+                        target.onerror = null;
+                        target.src = '/default-globe.svg';
                       }}
                       className="w-full h-full object-cover" 
                    />
@@ -1891,7 +1888,7 @@ export default function App() {
                   // STRICT: Slugs must have length >= 3 to prevent single-letter collisions like 'c' matching Coinbase!
                   const slugs = [...new Set([slug1, slug2, slug3].filter(s => s && s.length >= 3))];
                   
-                  const quickIcons: string[] = [];
+                  const quickIcons: string[] = ['/default-globe.svg'];
                   for (const s of slugs) {
                     quickIcons.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${s}.svg`);
                     quickIcons.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${s}.png`);
