@@ -497,17 +497,8 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
       !icon.toLowerCase().includes('favicon.ico')
     );
 
-    // Check Google 128px high-res favicon ONLY if verified status 200 and not the default 16x16 globe
-    try {
-      const gUrl = `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${baseUrl.origin}&size=128`;
-      const gRes = await fetch(gUrl, { signal: AbortSignal.timeout(1500) });
-      if (gRes.ok) {
-        const gBuf = await gRes.arrayBuffer();
-        if (gBuf.byteLength > 800) {
-          hdIcons.push(gUrl);
-        }
-      }
-    } catch {}
+    // Google 128px high-res favicon
+    hdIcons.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${baseUrl.origin}&size=128`);
 
     // Clean slugs for repository search
     const finalTitle = getBetterTitle(title || '', baseUrl.href);
@@ -564,14 +555,9 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
       }
     });
 
-    const finalIcons = [...new Set(hdIcons)];
-    if (finalIcons.length === 0) {
-      finalIcons.push(generateFallbackSvg(finalTitle, baseUrl.href));
-    }
-
     res.json({ 
       title: finalTitle, 
-      icons: finalIcons,
+      icons: [...new Set(hdIcons)],
       siteUrl: baseUrl.href
     });
   } catch (err) {
@@ -595,10 +581,7 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
         fallbackIcons.unshift(...searchMatches.map(m => m.url));
       }
 
-      // If no valid icon found, use the high-res SVG lettermark badge
-      if (fallbackIcons.length === 0) {
-        fallbackIcons.push(generateFallbackSvg(fallbackTitle, u.href));
-      }
+      fallbackIcons.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${u.origin}&size=128`);
       
       res.json({
         title: fallbackTitle,
@@ -610,36 +593,6 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
     }
   }
 });
-
-function generateFallbackSvg(title: string, url: string): string {
-  const cleanTitle = (title || '').trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '');
-  let initials = 'AP';
-  if (cleanTitle && cleanTitle.toLowerCase() !== 'unknown' && cleanTitle.toLowerCase() !== 'error') {
-    const words = cleanTitle.split(/[\s\-_.]+/).filter(w => w.length > 0);
-    initials = words.length >= 2 ? (words[0][0] + words[1][0]).toUpperCase() : cleanTitle.slice(0, 2).toUpperCase();
-  } else if (url) {
-    try {
-      const u = new URL(url.startsWith('http') ? url : `https://${url}`);
-      initials = u.hostname.replace(/^www\./i, '').slice(0, 2).toUpperCase();
-    } catch {}
-  }
-  const palettes = [
-    { start: '#0284c7', end: '#0369a1' },
-    { start: '#6366f1', end: '#4f46e5' },
-    { start: '#8b5cf6', end: '#7c3aed' },
-    { start: '#d946ef', end: '#c026d3' },
-    { start: '#059669', end: '#047857' },
-    { start: '#0d9488', end: '#0f766e' },
-    { start: '#ea580c', end: '#c2410c' },
-    { start: '#2563eb', end: '#1d4ed8' },
-  ];
-  let hash = 0;
-  const seed = (title || '') + (url || '');
-  for (let i = 0; i < seed.length; i++) hash = (hash << 5) - hash + seed.charCodeAt(i);
-  const p = palettes[Math.abs(hash) % palettes.length];
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${p.start}"/><stop offset="100%" stop-color="${p.end}"/></linearGradient><linearGradient id="s" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#ffffff" stop-opacity="0.28"/><stop offset="60%" stop-color="#ffffff" stop-opacity="0.03"/><stop offset="100%" stop-color="#ffffff" stop-opacity="0"/></linearGradient><filter id="f" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.3"/></filter></defs><rect x="5" y="5" width="118" height="118" rx="30" fill="url(#g)" stroke="rgba(255,255,255,0.22)" stroke-width="2"/><rect x="6" y="6" width="116" height="58" rx="28" fill="url(#s)"/><text x="64" y="69" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${initials.length > 2 ? '38' : '46'}" font-weight="800" letter-spacing="-0.5" fill="#ffffff" text-anchor="middle" dominant-baseline="central" filter="url(#f)">${initials}</text></svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-}
 
 // Dedicated Icon Search API for Homarr & Simple Icons
 app.get("/api/search-icons", (req, res) => {
