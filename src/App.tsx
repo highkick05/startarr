@@ -2049,7 +2049,7 @@ export default function App() {
                                      updateShortcutDynamically(contextMenu.shortcut!.id, { iconUrl: ico });
                                      setContextMenu(prev => ({ ...prev, shortcut: { ...prev.shortcut!, iconUrl: ico } }));
                                   }}
-                                  className={`w-9 h-9 rounded-lg bg-neutral-800/90 border overflow-hidden flex items-center justify-center transition-all p-1.5 shrink-0 mb-1 ${
+                                  className={`w-8 h-8 min-w-[32px] min-h-[32px] max-w-[32px] max-h-[32px] rounded-lg bg-neutral-800/90 border overflow-hidden flex items-center justify-center transition-all p-1 shrink-0 ${
                                     contextMenu.shortcut?.iconUrl === ico 
                                       ? 'border-blue-500 ring-2 ring-blue-500/50 bg-blue-500/20' 
                                       : 'border-neutral-700/60 hover:border-neutral-500 hover:bg-neutral-700/60'
@@ -2058,7 +2058,7 @@ export default function App() {
                                   <img 
                                      src={ico} 
                                      alt="icon"
-                                     className="w-full h-full object-contain rounded" 
+                                     className="w-6 h-6 max-w-[24px] max-h-[24px] object-contain rounded" 
                                      onLoad={(e) => {
                                         const img = e.currentTarget;
                                         const isSvg = ico.toLowerCase().includes('.svg') || ico.includes('cdn.simpleicons.org');
