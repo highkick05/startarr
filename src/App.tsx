@@ -307,30 +307,77 @@ export default function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [isAddingShortcut, setIsAddingShortcut] = useState(false);
   const [quickIconSearch, setQuickIconSearch] = useState('');
+  const [searchedIcons, setSearchedIcons] = useState<string[]>([]);
+  const [isSearchingIcons, setIsSearchingIcons] = useState(false);
+  const [failedIconUrls, setFailedIconUrls] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const term = quickIconSearch.trim();
+    if (!term) {
+      setSearchedIcons([]);
+      setIsSearchingIcons(false);
+      return;
+    }
+
+    setIsSearchingIcons(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search-icons?q=${encodeURIComponent(term)}`);
+        const data = await res.json();
+        if (data && Array.isArray(data.icons)) {
+          setSearchedIcons(data.icons);
+        } else {
+          setSearchedIcons([]);
+        }
+      } catch (e) {
+        console.error("Failed to search icons:", e);
+        setSearchedIcons([]);
+      } finally {
+        setIsSearchingIcons(false);
+      }
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [quickIconSearch]);
 
   const scanQuickIcons = async (targetUrl: string, searchQuery = '') => {
-    if (!targetUrl) return;
+    if (!targetUrl && !searchQuery) return;
     setContextMenu(prev => ({ ...prev, isScanning: true }));
     try {
-      const res = await fetch('/api/scrape-metadata', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: targetUrl, query: searchQuery })
-      });
-      const data = await res.json();
-      if (data && Array.isArray(data.icons)) {
-        const hdScraped = data.icons.filter((i: string) => 
-          i && 
-          !i.toLowerCase().endsWith('.ico') && 
-          !i.toLowerCase().includes('.ico?') && 
-          !i.toLowerCase().includes('favicon.ico')
-        );
-        setContextMenu(prev => ({
-          ...prev,
-          isScanning: false,
-          extraIcons: [...new Set([...(prev.extraIcons || []), ...hdScraped])]
-        }));
+      if (searchQuery.trim()) {
+        fetch(`/api/search-icons?q=${encodeURIComponent(searchQuery.trim())}`)
+          .then(r => r.json())
+          .then(data => {
+            if (data && Array.isArray(data.icons) && data.icons.length > 0) {
+              setSearchedIcons(prev => [...new Set([...prev, ...data.icons])]);
+            }
+          })
+          .catch(() => {});
+      }
+
+      if (targetUrl) {
+        const res = await fetch('/api/scrape-metadata', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: targetUrl, query: searchQuery })
+        });
+        const data = await res.json();
+        if (data && Array.isArray(data.icons)) {
+          const hdScraped = data.icons.filter((i: string) => 
+            i && 
+            !i.toLowerCase().endsWith('.ico') && 
+            !i.toLowerCase().includes('.ico?') && 
+            !i.toLowerCase().includes('favicon.ico')
+          );
+          setContextMenu(prev => ({
+            ...prev,
+            isScanning: false,
+            extraIcons: [...new Set([...(prev.extraIcons || []), ...hdScraped])]
+          }));
+        } else {
+          setContextMenu(prev => ({ ...prev, isScanning: false }));
+        }
       } else {
         setContextMenu(prev => ({ ...prev, isScanning: false }));
       }
@@ -783,6 +830,8 @@ export default function App() {
                 isScanning: false
               });
               setQuickIconSearch('');
+              setSearchedIcons([]);
+              setFailedIconUrls(new Set());
               if (found.url && found.type !== 'container') {
                 scanQuickIcons(found.url, '');
               }
@@ -1888,95 +1937,59 @@ export default function App() {
                   // STRICT: Slugs must have length >= 3 to prevent single-letter collisions like 'c' matching Coinbase!
                   const slugs = [...new Set([slug1, slug2, slug3].filter(s => s && s.length >= 3))];
                   
-                  const quickIcons: string[] = ['/default-globe.svg'];
-                  for (const s of slugs) {
-                    quickIcons.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${s}.svg`);
-                    quickIcons.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${s}.png`);
-                    quickIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${s}.svg`);
-                    quickIcons.push(`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${s}.svg`);
+                  let candidateIcons: string[] = [];
+
+                  if (quickIconSearch.trim()) {
+                    // User is actively searching: Show verified searched icons
+                    const term = quickIconSearch.trim().toLowerCase();
+                    const matchingExtra = (contextMenu.extraIcons || []).filter(ico => 
+                      ico.toLowerCase().includes(term)
+                    );
+                    candidateIcons = [...new Set([...searchedIcons, ...matchingExtra])];
+                  } else {
+                    // Default view: Show vector globe, site scraped icons, and domain/slug icons
+                    const defaults: string[] = ['/default-globe.svg'];
+                    if (contextMenu.extraIcons && contextMenu.extraIcons.length > 0) {
+                      defaults.push(...contextMenu.extraIcons);
+                    }
+                    for (const s of slugs) {
+                      defaults.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${s}.svg`);
+                      defaults.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${s}.svg`);
+                      defaults.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${s}.png`);
+                    }
+                    defaults.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`);
+                    candidateIcons = defaults;
                   }
 
-                  // High-res Google 128px Favicon (HD)
-                  quickIcons.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`);
-
-                  // Append any extra icons found from live scanning
-                  if (contextMenu.extraIcons && contextMenu.extraIcons.length > 0) {
-                    quickIcons.push(...contextMenu.extraIcons);
-                  }
-
-                  // Strict filter: Exclude all .ico files and deduplicate
-                  let displayedIcons = [...new Set(quickIcons)].filter(ico => 
+                  // Strict filter: exclude .ico files and URLs that failed to load
+                  const displayedIcons = [...new Set(candidateIcons)].filter(ico => 
+                    ico &&
+                    !failedIconUrls.has(ico) &&
                     !ico.toLowerCase().endsWith('.ico') && 
                     !ico.toLowerCase().includes('.ico?') && 
                     !ico.toLowerCase().includes('favicon.ico')
                   );
-
-                  if (quickIconSearch.trim()) {
-                    const term = quickIconSearch.trim().toLowerCase();
-                    const filtered = displayedIcons.filter(ico => ico.toLowerCase().includes(term));
-                    if (filtered.length > 0) {
-                      displayedIcons = filtered;
-                    }
-                  }
                   
                   return (
                     <div className="flex flex-col space-y-2 mt-3">
                        <div className="flex items-center justify-between">
                          <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
                            <span>Quick Icons</span>
-                           {contextMenu.isScanning && (
+                           {(contextMenu.isScanning || isSearchingIcons) && (
                              <RefreshCw size={10} className="animate-spin text-blue-400" />
                            )}
                          </label>
                          <span className="text-[9px] text-neutral-500 font-medium">
-                           {contextMenu.isScanning ? 'Scanning site...' : `${displayedIcons.length} HD Logos`}
+                           {contextMenu.isScanning || isSearchingIcons 
+                             ? 'Searching...' 
+                             : displayedIcons.length > 0 
+                               ? `${displayedIcons.length} HD Logos` 
+                               : '0 Logos'}
                          </span>
                        </div>
-                       
-                       <div className="flex gap-2 flex-wrap max-h-36 overflow-y-auto pr-1">
-                          {displayedIcons.map((ico, idx) => (
-                             <button 
-                                key={idx}
-                                type="button"
-                                title="Select icon"
-                                onClick={() => {
-                                   updateShortcutDynamically(contextMenu.shortcut!.id, { iconUrl: ico });
-                                   setContextMenu(prev => ({ ...prev, shortcut: { ...prev.shortcut!, iconUrl: ico } }));
-                                }}
-                                className={`w-8 h-8 rounded-lg bg-neutral-950/60 border overflow-hidden flex items-center justify-center transition-all p-1 shrink-0 mb-1 ${
-                                  contextMenu.shortcut?.iconUrl === ico 
-                                    ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-500/10' 
-                                    : 'border-neutral-800 hover:border-neutral-700 hover:bg-neutral-900'
-                                }`}
-                             >
-                                <img 
-                                   src={ico} 
-                                   alt="icon"
-                                   className="w-full h-full object-contain rounded" 
-                                   onLoad={(e) => {
-                                      const img = e.currentTarget;
-                                      const isSvg = ico.toLowerCase().includes('.svg');
-                                      // Strictly exclude low quality icons (< 64px width or height)
-                                      if (!isSvg && img.naturalWidth > 0 && (img.naturalWidth < 64 || img.naturalHeight < 64)) {
-                                         img.style.display = 'none';
-                                         if (img.parentElement) {
-                                            img.parentElement.style.display = 'none';
-                                         }
-                                      }
-                                   }}
-                                   onError={(e) => { 
-                                      e.currentTarget.style.display = 'none'; 
-                                      if (e.currentTarget.parentElement) {
-                                         e.currentTarget.parentElement.style.display = 'none'; 
-                                      }
-                                   }} 
-                                />
-                             </button>
-                          ))}
-                       </div>
 
-                       {/* Inline Scan & Search bar (No popup modal!) */}
-                       <div className="flex gap-1.5 pt-1">
+                       {/* Inline Scan & Search bar placed prominently ABOVE the gallery */}
+                       <div className="flex gap-1.5 pt-0.5">
                          <div className="relative flex-1">
                            <input
                              type="text"
@@ -1990,7 +2003,7 @@ export default function App() {
                                  }
                                }
                              }}
-                             placeholder="Search site logos..."
+                             placeholder="Search site logos... (e.g. dev, plex)"
                              className="w-full bg-neutral-950/80 border border-neutral-800 rounded-lg px-2 py-1 text-[11px] text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-blue-500/50 transition-colors"
                            />
                            {quickIconSearch && (
@@ -2005,7 +2018,7 @@ export default function App() {
                          </div>
                          <button
                            type="button"
-                           disabled={contextMenu.isScanning}
+                           disabled={contextMenu.isScanning || isSearchingIcons}
                            onClick={() => {
                              if (contextMenu.shortcut?.url) {
                                scanQuickIcons(contextMenu.shortcut.url, quickIconSearch.trim());
@@ -2014,7 +2027,7 @@ export default function App() {
                            className="px-2 py-1 bg-neutral-950/80 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-800 hover:border-neutral-700 rounded-lg text-[11px] font-medium flex items-center gap-1 transition-colors shrink-0 disabled:opacity-50"
                            title="Scan website for HD logos"
                          >
-                           {contextMenu.isScanning ? (
+                           {contextMenu.isScanning || isSearchingIcons ? (
                              <RefreshCw size={11} className="animate-spin text-blue-400" />
                            ) : (
                              <Search size={11} className="text-blue-400" />
@@ -2022,6 +2035,57 @@ export default function App() {
                            <span>{contextMenu.isScanning ? 'Scanning' : 'Scan'}</span>
                          </button>
                        </div>
+                       
+                       {/* Thumbnail Gallery */}
+                       {displayedIcons.length > 0 ? (
+                         <div className="flex gap-2 flex-wrap max-h-36 overflow-y-auto pr-1">
+                            {displayedIcons.map((ico, idx) => (
+                               <button 
+                                  key={idx}
+                                  type="button"
+                                  title="Select icon"
+                                  onClick={() => {
+                                     updateShortcutDynamically(contextMenu.shortcut!.id, { iconUrl: ico });
+                                     setContextMenu(prev => ({ ...prev, shortcut: { ...prev.shortcut!, iconUrl: ico } }));
+                                  }}
+                                  className={`w-8 h-8 rounded-lg bg-neutral-950/60 border overflow-hidden flex items-center justify-center transition-all p-1 shrink-0 mb-1 ${
+                                    contextMenu.shortcut?.iconUrl === ico 
+                                      ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-500/10' 
+                                      : 'border-neutral-800 hover:border-neutral-700 hover:bg-neutral-900'
+                                  }`}
+                               >
+                                  <img 
+                                     src={ico} 
+                                     alt="icon"
+                                     className="w-full h-full object-contain rounded" 
+                                     onLoad={(e) => {
+                                        const img = e.currentTarget;
+                                        const isSvg = ico.toLowerCase().includes('.svg');
+                                        // Strictly exclude low quality icons (< 48px width or height)
+                                        if (!isSvg && img.naturalWidth > 0 && (img.naturalWidth < 48 || img.naturalHeight < 48)) {
+                                           setFailedIconUrls(prev => new Set(prev).add(ico));
+                                        }
+                                     }}
+                                     onError={() => { 
+                                        setFailedIconUrls(prev => new Set(prev).add(ico));
+                                     }} 
+                                  />
+                               </button>
+                            ))}
+                         </div>
+                       ) : (
+                         <div className="py-2.5 px-2 text-center text-neutral-500 text-[11px] bg-neutral-950/40 rounded-lg border border-neutral-800/60">
+                           {isSearchingIcons || contextMenu.isScanning ? (
+                             <span className="flex items-center justify-center gap-1.5 text-blue-400">
+                               <RefreshCw size={12} className="animate-spin" /> Searching icons...
+                             </span>
+                           ) : quickIconSearch.trim() ? (
+                             <span>No logos found for "{quickIconSearch}". Try another search term or click Scan.</span>
+                           ) : (
+                             <span>No site icons found. Use the search bar above to find logos.</span>
+                           )}
+                         </div>
+                       )}
                     </div>
                   );
                 })()}

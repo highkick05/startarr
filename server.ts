@@ -56,6 +56,92 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
+// Load verified icon catalogs for Simple Icons and Dashboard Icons
+const dashIconsPath = path.join(process.cwd(), "src/data/dashboard-icons-list.json");
+const simpleIconsPath = path.join(process.cwd(), "src/data/simple-icons-list.json");
+let dashIconsList: string[] = [];
+let simpleIconsList: string[] = [];
+let dashIconsSet = new Set<string>();
+let simpleIconsSet = new Set<string>();
+
+try {
+  if (fs.existsSync(dashIconsPath)) {
+    dashIconsList = JSON.parse(fs.readFileSync(dashIconsPath, "utf-8"));
+    dashIconsSet = new Set(dashIconsList.map(s => s.toLowerCase()));
+  }
+  if (fs.existsSync(simpleIconsPath)) {
+    simpleIconsList = JSON.parse(fs.readFileSync(simpleIconsPath, "utf-8"));
+    simpleIconsSet = new Set(simpleIconsList.map(s => s.toLowerCase()));
+  }
+} catch (e) {
+  console.error("Error reading icon catalogs:", e);
+}
+
+function searchVerifiedIcons(query: string, limit = 40): string[] {
+  if (!query || !query.trim()) return [];
+  const q = query.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+  if (!q) return [];
+  
+  const results: string[] = [];
+  const seen = new Set<string>();
+
+  const addDash = (item: string) => {
+    const url = `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${item}.svg`;
+    if (!seen.has(url)) {
+      seen.add(url);
+      results.push(url);
+    }
+  };
+
+  const addSimple = (item: string) => {
+    const url = `https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${item}.svg`;
+    if (!seen.has(url)) {
+      seen.add(url);
+      results.push(url);
+    }
+  };
+
+  // 1. Exact matches
+  for (const item of dashIconsList) {
+    if (item.toLowerCase() === q) addDash(item);
+  }
+  for (const item of simpleIconsList) {
+    if (item.toLowerCase() === q) addSimple(item);
+  }
+
+  // 2. Starts with query
+  for (const item of dashIconsList) {
+    if (item.toLowerCase().startsWith(q + '-') || item.toLowerCase().startsWith(q)) {
+      addDash(item);
+      if (results.length >= limit) break;
+    }
+  }
+  for (const item of simpleIconsList) {
+    if (item.toLowerCase().startsWith(q)) {
+      addSimple(item);
+      if (results.length >= limit) break;
+    }
+  }
+
+  // 3. Substring contains query
+  if (q.length >= 2 && results.length < limit) {
+    for (const item of dashIconsList) {
+      if (item.toLowerCase().includes(q)) {
+        addDash(item);
+        if (results.length >= limit) break;
+      }
+    }
+    for (const item of simpleIconsList) {
+      if (item.toLowerCase().includes(q)) {
+        addSimple(item);
+        if (results.length >= limit) break;
+      }
+    }
+  }
+
+  return results.slice(0, limit);
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOADS_DIR),
   filename: (req, file, cb) => {
@@ -409,13 +495,24 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
 
     const candidateSlugs = [...new Set([searchSlug, titleSlug, domainSlug].filter(s => s && s.length >= 3))];
 
+    // Add verified icons matching candidate slugs
     for (const slug of candidateSlugs) {
       const validWalkx = await getVerifiedWalkxcode(slug);
       if (validWalkx.length > 0) {
         hdIcons.unshift(...validWalkx);
       }
-      hdIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${slug}.svg`);
-      hdIcons.push(`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${slug}.svg`);
+      if (simpleIconsSet.has(slug)) {
+        hdIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${slug}.svg`);
+      }
+      if (dashIconsSet.has(slug)) {
+        hdIcons.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${slug}.svg`);
+      }
+    }
+
+    // If a search query was supplied, also find verified icons matching the search term!
+    if (query && query.trim()) {
+      const queryIcons = searchVerifiedIcons(query.trim(), 20);
+      hdIcons.unshift(...queryIcons);
     }
 
     // Check common high-res logo endpoints on the target domain
@@ -474,8 +571,17 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
       for (const slug of [...new Set([searchSlug, domainSlug].filter(s => s && s.length >= 3))]) {
         const validWalkx = await getVerifiedWalkxcode(slug);
         fallbackIcons.push(...validWalkx);
-        fallbackIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${slug}.svg`);
-        fallbackIcons.push(`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${slug}.svg`);
+        if (simpleIconsSet.has(slug)) {
+          fallbackIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${slug}.svg`);
+        }
+        if (dashIconsSet.has(slug)) {
+          fallbackIcons.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${slug}.svg`);
+        }
+      }
+
+      if (query && query.trim()) {
+        const queryIcons = searchVerifiedIcons(query.trim(), 20);
+        fallbackIcons.unshift(...queryIcons);
       }
       
       const verifiedFallbacks = [...new Set(fallbackIcons)];
@@ -492,6 +598,13 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
        res.status(400).json({ error: "Invalid URL" });
     }
   }
+});
+
+// Real-time verified icon catalog search endpoint
+app.get("/api/search-icons", (req: any, res) => {
+  const query = (req.query.q || "").toString();
+  const icons = searchVerifiedIcons(query, 50);
+  res.json({ icons });
 });
 
 
