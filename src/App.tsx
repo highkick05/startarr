@@ -94,21 +94,6 @@ export default function App() {
     }).catch(console.error);
   }, []);
 
-  // Automatically upgrade any low-res / pixelated icons (like 16x16 gstatic globe) to the crisp vector globe
-  useEffect(() => {
-    const upgradeLowRes = () => {
-      document.querySelectorAll('.grid-stack-item img').forEach((img: any) => {
-        if (img.naturalWidth > 0 && (img.naturalWidth < 48 || img.naturalHeight < 48)) {
-          img.src = '/default-globe.svg';
-        }
-      });
-    };
-    const t1 = setTimeout(upgradeLowRes, 400);
-    const t2 = setTimeout(upgradeLowRes, 1200);
-    const t3 = setTimeout(upgradeLowRes, 3000);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
-  }, [shortcuts]);
-
   const gridContainerRef = useRef<HTMLDivElement>(null);
 
     // Absolute fallback: globally observe for dragged items
@@ -252,6 +237,21 @@ export default function App() {
       { id: '3', title: 'YouTube', url: 'https://youtube.com', x: 2, y: 0, w: 1, h: 8, type: 'app' }
     ];
   });
+
+  // Automatically upgrade any low-res / pixelated icons (like 16x16 gstatic globe) to the crisp vector globe
+  useEffect(() => {
+    const upgradeLowRes = () => {
+      document.querySelectorAll('.grid-stack-item img').forEach((img: any) => {
+        if (img.naturalWidth > 0 && (img.naturalWidth < 48 || img.naturalHeight < 48)) {
+          img.src = '/default-globe.svg';
+        }
+      });
+    };
+    const t1 = setTimeout(upgradeLowRes, 400);
+    const t2 = setTimeout(upgradeLowRes, 1200);
+    const t3 = setTimeout(upgradeLowRes, 3000);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [shortcuts]);
 
   const getMaxColumns = (size = layoutSize) => {
     if (size === 'small') return 24;
