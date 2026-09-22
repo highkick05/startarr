@@ -1954,7 +1954,8 @@ export default function App() {
                     }
                     for (const s of slugs) {
                       defaults.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${s}.svg`);
-                      defaults.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${s}.svg`);
+                      defaults.push(`https://cdn.simpleicons.org/${s}`);
+                      defaults.push(`https://cdn.simpleicons.org/${s}/white`);
                       defaults.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${s}.png`);
                     }
                     defaults.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`);
@@ -2003,7 +2004,7 @@ export default function App() {
                                  }
                                }
                              }}
-                             placeholder="Search site logos... (e.g. dev, plex)"
+                             placeholder="Search site logos... (e.g. nba, plex)"
                              className="w-full bg-neutral-950/80 border border-neutral-800 rounded-lg px-2 py-1 text-[11px] text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-blue-500/50 transition-colors"
                            />
                            {quickIconSearch && (
@@ -2048,10 +2049,10 @@ export default function App() {
                                      updateShortcutDynamically(contextMenu.shortcut!.id, { iconUrl: ico });
                                      setContextMenu(prev => ({ ...prev, shortcut: { ...prev.shortcut!, iconUrl: ico } }));
                                   }}
-                                  className={`w-8 h-8 rounded-lg bg-neutral-950/60 border overflow-hidden flex items-center justify-center transition-all p-1 shrink-0 mb-1 ${
+                                  className={`w-9 h-9 rounded-lg bg-neutral-800/90 border overflow-hidden flex items-center justify-center transition-all p-1.5 shrink-0 mb-1 ${
                                     contextMenu.shortcut?.iconUrl === ico 
-                                      ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-500/10' 
-                                      : 'border-neutral-800 hover:border-neutral-700 hover:bg-neutral-900'
+                                      ? 'border-blue-500 ring-2 ring-blue-500/50 bg-blue-500/20' 
+                                      : 'border-neutral-700/60 hover:border-neutral-500 hover:bg-neutral-700/60'
                                   }`}
                                >
                                   <img 
@@ -2060,7 +2061,7 @@ export default function App() {
                                      className="w-full h-full object-contain rounded" 
                                      onLoad={(e) => {
                                         const img = e.currentTarget;
-                                        const isSvg = ico.toLowerCase().includes('.svg');
+                                        const isSvg = ico.toLowerCase().includes('.svg') || ico.includes('cdn.simpleicons.org');
                                         // Strictly exclude low quality icons (< 48px width or height)
                                         if (!isSvg && img.naturalWidth > 0 && (img.naturalWidth < 48 || img.naturalHeight < 48)) {
                                            setFailedIconUrls(prev => new Set(prev).add(ico));

@@ -86,22 +86,34 @@ function searchVerifiedIcons(query: string, limit = 40): string[] {
   const seen = new Set<string>();
 
   const addDash = (item: string) => {
-    const url = `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${item}.svg`;
-    if (!seen.has(url)) {
-      seen.add(url);
-      results.push(url);
+    const svgUrl = `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${item}.svg`;
+    if (!seen.has(svgUrl)) {
+      seen.add(svgUrl);
+      results.push(svgUrl);
+    }
+    const pngUrl = `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${item}.png`;
+    if (!seen.has(pngUrl)) {
+      seen.add(pngUrl);
+      results.push(pngUrl);
     }
   };
 
   const addSimple = (item: string) => {
-    const url = `https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${item}.svg`;
-    if (!seen.has(url)) {
-      seen.add(url);
-      results.push(url);
+    // 1. Official Brand Color vector (e.g. NBA blue, Spotify green, YouTube red)
+    const colorUrl = `https://cdn.simpleicons.org/${item}`;
+    if (!seen.has(colorUrl)) {
+      seen.add(colorUrl);
+      results.push(colorUrl);
+    }
+    // 2. High-contrast White vector (perfect for dark themes / wallpapers)
+    const whiteUrl = `https://cdn.simpleicons.org/${item}/white`;
+    if (!seen.has(whiteUrl)) {
+      seen.add(whiteUrl);
+      results.push(whiteUrl);
     }
   };
 
-  // 1. Exact matches
+  // Tier 1: Exact matches (e.g. q === 'nba')
   for (const item of dashIconsList) {
     if (item.toLowerCase() === q) addDash(item);
   }
@@ -109,33 +121,66 @@ function searchVerifiedIcons(query: string, limit = 40): string[] {
     if (item.toLowerCase() === q) addSimple(item);
   }
 
-  // 2. Starts with query
+  // Tier 2: Slug starts with query as prefix (e.g. 'nba-' or 'nba_')
   for (const item of dashIconsList) {
-    if (item.toLowerCase().startsWith(q + '-') || item.toLowerCase().startsWith(q)) {
-      addDash(item);
-      if (results.length >= limit) break;
-    }
+    const s = item.toLowerCase();
+    if (s.startsWith(q + '-') || s.startsWith(q + '_')) addDash(item);
   }
   for (const item of simpleIconsList) {
-    if (item.toLowerCase().startsWith(q)) {
-      addSimple(item);
-      if (results.length >= limit) break;
-    }
+    const s = item.toLowerCase();
+    if (s.startsWith(q + '-') || s.startsWith(q + '_')) addSimple(item);
   }
 
-  // 3. Substring contains query
-  if (q.length >= 2 && results.length < limit) {
+  // Tier 3: Word token exact match (e.g. 'espn-nba' has token 'nba')
+  for (const item of dashIconsList) {
+    const tokens = item.toLowerCase().replace(/_/g, '-').split('-');
+    if (tokens.includes(q)) addDash(item);
+  }
+  for (const item of simpleIconsList) {
+    const tokens = item.toLowerCase().replace(/_/g, '-').split('-');
+    if (tokens.includes(q)) addSimple(item);
+  }
+
+  // Tier 4: Token prefix match for search length >= 3 (e.g. 'dev' matches 'chrome-dev', 'developer')
+  if (q.length >= 3 && results.length < limit) {
     for (const item of dashIconsList) {
-      if (item.toLowerCase().includes(q)) {
+      const tokens = item.toLowerCase().replace(/_/g, '-').split('-');
+      if (tokens.some(t => t.startsWith(q))) {
         addDash(item);
         if (results.length >= limit) break;
       }
     }
     for (const item of simpleIconsList) {
-      if (item.toLowerCase().includes(q)) {
+      const tokens = item.toLowerCase().replace(/_/g, '-').split('-');
+      if (tokens.some(t => t.startsWith(q))) {
         addSimple(item);
         if (results.length >= limit) break;
       }
+    }
+  }
+
+  // Tier 5: Whole slug starts with query for longer queries (length >= 4)
+  if (q.length >= 4 && results.length < limit) {
+    for (const item of dashIconsList) {
+      if (item.toLowerCase().startsWith(q)) {
+        addDash(item);
+        if (results.length >= limit) break;
+      }
+    }
+    for (const item of simpleIconsList) {
+      if (item.toLowerCase().startsWith(q)) {
+        addSimple(item);
+        if (results.length >= limit) break;
+      }
+    }
+  }
+
+  // Tier 6: High-res domain favicon candidate (e.g. nba -> nba.com 128px official logo)
+  if (q.length >= 2 && results.length < limit) {
+    const domainFavicon = `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${q}.com&size=128`;
+    if (!seen.has(domainFavicon)) {
+      seen.add(domainFavicon);
+      results.push(domainFavicon);
     }
   }
 
