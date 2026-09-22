@@ -663,10 +663,6 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
     !ico.toLowerCase().includes('favicon.ico')
   );
 
-  if (finalIcons.length === 0) {
-    finalIcons.push('/default-globe.svg');
-  }
-
   return res.json({
     title: finalTitle,
     icons: finalIcons,

@@ -368,6 +368,8 @@ export default function App() {
         if (data && Array.isArray(data.icons)) {
           const hdScraped = data.icons.filter((i: string) => 
             i && 
+            i !== '/default-globe.svg' &&
+            !i.includes('default-globe.svg') &&
             !i.toLowerCase().endsWith('.ico') && 
             !i.toLowerCase().includes('.ico?') && 
             !i.toLowerCase().includes('favicon.ico')
@@ -2013,8 +2015,8 @@ export default function App() {
                     );
                     candidateIcons = [...new Set([...searchedIcons, ...matchingExtra])];
                   } else {
-                    // Default view: Show vector globe, site scraped icons, and domain/slug icons
-                    const defaults: string[] = ['/default-globe.svg'];
+                    // Default view: Show site scraped icons, and domain/slug icons (never default globe)
+                    const defaults: string[] = [];
                     if (contextMenu.extraIcons && contextMenu.extraIcons.length > 0) {
                       defaults.push(...contextMenu.extraIcons);
                     }
@@ -2036,9 +2038,11 @@ export default function App() {
                     candidateIcons = defaults;
                   }
 
-                  // Strict filter: exclude .ico files and URLs that failed to load
+                  // Strict filter: NEVER include default globe icon; exclude .ico files and URLs that failed to load
                   const displayedIcons = [...new Set(candidateIcons)].filter(ico => 
                     ico &&
+                    ico !== '/default-globe.svg' &&
+                    !ico.includes('default-globe.svg') &&
                     !failedIconUrls.has(ico) &&
                     !ico.toLowerCase().endsWith('.ico') && 
                     !ico.toLowerCase().includes('.ico?') && 
