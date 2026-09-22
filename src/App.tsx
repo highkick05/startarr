@@ -546,6 +546,29 @@ export default function App() {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
+  // Close Settings panel when clicking on the empty wallpaper (without blocking interaction with shortcuts or context menus)
+  useEffect(() => {
+    if (!isSettingsOpen) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Do not close settings if clicking inside settings panel, context menu, or on any shortcut/widget
+      if (
+        target.closest('#settings-panel') ||
+        target.closest('#app-context-menu') ||
+        target.closest('.grid-stack-item') ||
+        target.closest('.recycle-bin-zone') ||
+        target.closest('input') ||
+        target.closest('button')
+      ) {
+        return;
+      }
+      setIsSettingsOpen(false);
+    };
+
+    window.addEventListener('pointerdown', handleOutsideClick);
+    return () => window.removeEventListener('pointerdown', handleOutsideClick);
+  }, [isSettingsOpen]);
+
   // Set up global shortcut removal for inline HTML onclick handlers
   useEffect(() => {
     (window as any).removeShortcut = (id: string) => {
@@ -799,7 +822,7 @@ export default function App() {
     };
 
     
-    window.addEventListener('contextmenu', (e) => {
+    const handleContextMenu = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (target.closest('#app-context-menu')) return;
       const itemEl = target.closest('.grid-stack-item');
@@ -821,9 +844,18 @@ export default function App() {
             };
             const found = findDeep(prev, id);
             if (found && found.type !== 'category') {
+              const menuWidth = 270;
+              const settingsEl = document.getElementById('settings-panel');
+              const isSettingsExpanded = settingsEl && !settingsEl.classList.contains('translate-x-full');
+              const rightEdge = isSettingsExpanded ? window.innerWidth - 390 : window.innerWidth;
+              let targetX = e.clientX;
+              if (targetX + menuWidth > rightEdge) {
+                targetX = Math.max(10, e.clientX - menuWidth);
+              }
+
               setContextMenu({
                 visible: true,
-                x: Math.min(e.clientX, window.innerWidth - 280),
+                x: targetX,
                 y: Math.min(e.clientY, window.innerHeight - 520),
                 shortcut: found,
                 extraIcons: [],
@@ -842,19 +874,23 @@ export default function App() {
       } else {
         setContextMenu({ visible: false, x: 0, y: 0, shortcut: null });
       }
-    });
+    };
 
-    window.addEventListener('click', (e) => {
+    const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (!target.closest('#app-context-menu')) {
         setContextMenu(prev => prev.visible ? { ...prev, visible: false } : prev);
       }
-    });
+    };
 
+    window.addEventListener('contextmenu', handleContextMenu);
+    window.addEventListener('click', handleClick);
     window.addEventListener('resize', debouncedResize);
 
     return () => {
       window.removeEventListener('resize', debouncedResize);
+      window.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('click', handleClick);
       if (gridInstance.current) {
         gridInstance.current.off('change', handleGridChange);
         gridInstance.current.off('added', handleGridChange);
@@ -1585,6 +1621,7 @@ export default function App() {
 
       {/* Settings Side Panel */}
       <div 
+        id="settings-panel"
         className={`fixed inset-y-0 right-0 z-50 w-full max-w-sm bg-neutral-900 border-l border-neutral-800 shadow-2xl transform transition-transform duration-300 ease-in-out flex flex-col ${
           isSettingsOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
@@ -1827,14 +1864,6 @@ export default function App() {
           </button>
         </div>
       </div>
-      
-      {/* Click-outside backdrop for Settings panel (without blurring or dimming dashboard) */}
-      {isSettingsOpen && (
-        <div 
-          onClick={() => setIsSettingsOpen(false)}
-          className="fixed inset-0 z-40"
-        />
-      )}
       
       {/* Context Menu */}
       {contextMenu.visible && contextMenu.shortcut && (
