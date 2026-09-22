@@ -200,134 +200,24 @@ let appDictionary: Record<string, string> = {
     'espn': 'ESPN', 'nba': 'NBA'
 };
 
-let homarrIcons: { svg: string[], png: string[] } = { svg: [], png: [] };
-let simpleIconsList: Array<{ title: string; slug: string }> = [];
-
 fetch('https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/tree.json')
   .then(res => res.json())
   .then(data => {
-      if (data) {
-          homarrIcons = {
-            svg: Array.isArray(data.svg) ? data.svg : [],
-            png: Array.isArray(data.png) ? data.png : []
-          };
-          if (homarrIcons.png && Array.isArray(homarrIcons.png)) {
-              homarrIcons.png.forEach((icon: string) => {
-                  let name = icon.replace('.png', '').replace('-dark', '').replace('-light', '');
-                  // STRICT: Exclude 1 and 2 letter icons to prevent false-positive dictionary matching
-                  if (name.length < 3) return;
-                  if (!appDictionary[name] && !appDictionary[name.replace(/-/g, '')]) {
-                      let formatted = name.split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
-                      appDictionary[name] = formatted;
-                      appDictionary[name.replace(/-/g, '')] = formatted;
-                  }
-              });
-              console.log(`Loaded homarr dashboard icons (${homarrIcons.svg.length} SVGs, ${homarrIcons.png.length} PNGs). App dictionary has ${Object.keys(appDictionary).length} entries.`);
-          }
+      if (data.png && Array.isArray(data.png)) {
+          data.png.forEach((icon: string) => {
+              let name = icon.replace('.png', '').replace('-dark', '').replace('-light', '');
+              // STRICT: Exclude 1 and 2 letter icons to prevent false-positive dictionary matching
+              if (name.length < 3) return;
+              if (!appDictionary[name] && !appDictionary[name.replace(/-/g, '')]) {
+                  let formatted = name.split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+                  appDictionary[name] = formatted;
+                  appDictionary[name.replace(/-/g, '')] = formatted;
+              }
+          });
+          console.log(`Loaded online app dictionary: ${Object.keys(appDictionary).length} apps available.`);
       }
   })
-  .catch(err => console.error("Failed to fetch homarr icons", err));
-
-fetch('https://cdn.jsdelivr.net/npm/simple-icons@latest/data/simple-icons.json')
-  .then(res => res.json())
-  .then(data => {
-      if (Array.isArray(data)) {
-          simpleIconsList = data.map(item => ({ title: item.title, slug: item.slug }));
-          console.log(`Loaded simple-icons (${simpleIconsList.length} icons).`);
-      }
-  })
-  .catch(err => console.error("Failed to fetch simple-icons", err));
-
-function searchIconLibraries(query: string, limit = 60): Array<{ title: string; url: string }> {
-  if (!query || query.trim().length < 2) return [];
-  const q = query.trim().toLowerCase();
-  const qClean = q.replace(/[^a-z0-9]/g, '');
-  
-  const results: Array<{ title: string; url: string; score: number }> = [];
-  const seenUrls = new Set<string>();
-
-  // 1. Homarr SVGs (priority for homelab / web apps)
-  for (const file of (homarrIcons.svg || [])) {
-    const rawName = file.replace(/\.svg$/, '');
-    const cleanName = rawName.replace(/[^a-z0-9]/g, '').toLowerCase();
-    const lowerName = rawName.toLowerCase();
-    
-    let score = -1;
-    if (cleanName === qClean) {
-      score = 100;
-    } else if (cleanName.startsWith(qClean)) {
-      score = 80;
-    } else if (lowerName.split(/[-_]/).some(part => part === q || part === qClean)) {
-      score = 70;
-    } else if (cleanName.includes(qClean) || lowerName.includes(q)) {
-      score = 50;
-    }
-
-    if (score > 0) {
-      const url = `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${file}`;
-      if (!seenUrls.has(url)) {
-        seenUrls.add(url);
-        const title = rawName.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-        results.push({ title, url, score: score - (rawName.length * 0.1) });
-      }
-    }
-  }
-
-  // 2. Simple Icons (priority for brand/tech logos like dev.to, devpost, etc.)
-  for (const item of (simpleIconsList || [])) {
-    const slug = (item.slug || '').toLowerCase();
-    const title = (item.title || '').toLowerCase();
-    const cleanSlug = slug.replace(/[^a-z0-9]/g, '');
-    const cleanTitle = title.replace(/[^a-z0-9]/g, '');
-
-    let score = -1;
-    if (cleanSlug === qClean || cleanTitle === qClean) {
-      score = 100;
-    } else if (cleanSlug.startsWith(qClean) || cleanTitle.startsWith(qClean)) {
-      score = 85;
-    } else if (title.split(/\s+/).some(part => part === q || part === qClean) || slug.split(/[-_]/).some(part => part === qClean)) {
-      score = 75;
-    } else if (cleanSlug.includes(qClean) || cleanTitle.includes(qClean)) {
-      score = 55;
-    }
-
-    if (score > 0) {
-      const url = `https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${item.slug}.svg`;
-      if (!seenUrls.has(url)) {
-        seenUrls.add(url);
-        results.push({ title: item.title, url, score: score - (slug.length * 0.1) });
-      }
-    }
-  }
-
-  // 3. Homarr PNGs (for icons not available in SVG)
-  for (const file of (homarrIcons.png || [])) {
-    const rawName = file.replace(/\.png$/, '').replace(/-dark$|-light$/, '');
-    const cleanName = rawName.replace(/[^a-z0-9]/g, '').toLowerCase();
-    const lowerName = rawName.toLowerCase();
-
-    let score = -1;
-    if (cleanName === qClean) {
-      score = 60;
-    } else if (cleanName.startsWith(qClean)) {
-      score = 45;
-    } else if (cleanName.includes(qClean) || lowerName.includes(q)) {
-      score = 30;
-    }
-
-    if (score > 0) {
-      const url = `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/${file}`;
-      if (!seenUrls.has(url)) {
-        seenUrls.add(url);
-        const title = rawName.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-        results.push({ title, url, score });
-      }
-    }
-  }
-
-  results.sort((a, b) => b.score - a.score);
-  return results.slice(0, limit).map(r => ({ title: r.title, url: r.url }));
-}
+  .catch(err => console.error("Failed to fetch online dictionary", err));
 
 function decodeHTMLEntities(text: string) {
     const entities: Record<string, string> = {
@@ -507,18 +397,15 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
     const titleSlug = finalTitle ? finalTitle.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
     const domainSlug = domainPart ? domainPart.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
 
-    const candidateSlugs = [...new Set([searchSlug, titleSlug, domainSlug].filter(s => s && s.length >= 2))];
+    const candidateSlugs = [...new Set([searchSlug, titleSlug, domainSlug].filter(s => s && s.length >= 3))];
 
     for (const slug of candidateSlugs) {
-      const found = searchIconLibraries(slug, 4);
-      if (found.length > 0) {
-        hdIcons.unshift(...found.map(f => f.url));
+      const validWalkx = await getVerifiedWalkxcode(slug);
+      if (validWalkx.length > 0) {
+        hdIcons.unshift(...validWalkx);
       }
-    }
-
-    if (query && query.trim().length >= 2) {
-      const searchMatches = searchIconLibraries(query.trim(), 20);
-      hdIcons.unshift(...searchMatches.map(m => m.url));
+      hdIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${slug}.svg`);
+      hdIcons.push(`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${slug}.svg`);
     }
 
     // Check common high-res logo endpoints on the target domain
@@ -569,18 +456,12 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
       const searchSlug = query ? query.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
       const domainSlug = domainPart ? domainPart.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
 
-      for (const slug of [...new Set([searchSlug, domainSlug].filter(s => s && s.length >= 2))]) {
-        const found = searchIconLibraries(slug, 4);
-        if (found.length > 0) {
-          fallbackIcons.push(...found.map(f => f.url));
-        }
+      for (const slug of [...new Set([searchSlug, domainSlug].filter(s => s && s.length >= 3))]) {
+        const validWalkx = await getVerifiedWalkxcode(slug);
+        fallbackIcons.push(...validWalkx);
+        fallbackIcons.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${slug}.svg`);
+        fallbackIcons.push(`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${slug}.svg`);
       }
-
-      if (query && query.trim().length >= 2) {
-        const searchMatches = searchIconLibraries(query.trim(), 20);
-        fallbackIcons.unshift(...searchMatches.map(m => m.url));
-      }
-
       fallbackIcons.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${u.origin}&size=128`);
       
       res.json({
@@ -592,19 +473,6 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
        res.status(400).json({ error: "Invalid URL" });
     }
   }
-});
-
-// Dedicated Icon Search API for Homarr & Simple Icons
-app.get("/api/search-icons", (req, res) => {
-  const q = String(req.query.q || '');
-  const results = searchIconLibraries(q, 60);
-  res.json({ results });
-});
-
-app.post("/api/search-icons", (req, res) => {
-  const q = String(req.body.query || req.body.q || '');
-  const results = searchIconLibraries(q, 60);
-  res.json({ results });
 });
 
 
