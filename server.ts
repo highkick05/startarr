@@ -64,7 +64,9 @@ try {
 // Fetch official high-res brand logos from Wikipedia / Wikimedia Commons
 async function getWikimediaLogos(term: string): Promise<string[]> {
   if (!term || term.trim().length < 3) return [];
-  const clean = term.replace(/[^a-zA-Z0-9\s]/g, ' ').trim();
+  const clean = term.replace(/[^a-zA-Z0-9\s-]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!clean || clean.length < 3) return [];
+
   const queries = [clean];
   const firstWord = clean.split(/\s+/)[0];
   if (firstWord && firstWord.toLowerCase() !== clean.toLowerCase() && firstWord.length >= 3) {
@@ -72,13 +74,20 @@ async function getWikimediaLogos(term: string): Promise<string[]> {
   }
 
   const results: string[] = [];
-  const junkWords = ['commons', 'symbol', 'share', 'arrow', 'ambox', 'flag', 'question', 'edit', 'disambig', 'portal', 'wikidata', 'wikimedia', 'stub', 'padlock', 'copyright', 'free-software-license'];
+  const junkWords = [
+    'commons', 'symbol', 'share', 'arrow', 'ambox', 'flag', 'question', 'edit', 
+    'disambig', 'portal', 'wikidata', 'wikimedia', 'stub', 'padlock', 'copyright', 
+    'free-software-license', 'license', 'fools', 'screenshot'
+  ];
 
   for (const q of queries.slice(0, 2)) {
     try {
       // 1. Check primary infobox pageimage for the topic
       const pageUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(q)}&prop=pageimages&pithumbsize=500&format=json`;
-      const pageRes = await fetch(pageUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(2000) });
+      const pageRes = await fetch(pageUrl, { 
+        headers: { 'User-Agent': 'StartarrDashboard/1.0 (https://github.com/highkick05/startarr; contact@startarr.app)' }, 
+        signal: AbortSignal.timeout(2500) 
+      });
       if (pageRes.ok) {
         const pageData: any = await pageRes.json();
         const pages = pageData.query?.pages || {};
@@ -93,9 +102,12 @@ async function getWikimediaLogos(term: string): Promise<string[]> {
         }
       }
 
-      // 2. Query images inside the page
-      const genUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(q)}&generator=images&gimlimit=10&prop=imageinfo&iiprop=url|size&format=json`;
-      const genRes = await fetch(genUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(2000) });
+      // 2. Query images inside the page (many software / brand logos are non-free fair-use File:*.png/svg)
+      const genUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(q)}&generator=images&gimlimit=15&prop=imageinfo&iiprop=url|size&format=json`;
+      const genRes = await fetch(genUrl, { 
+        headers: { 'User-Agent': 'StartarrDashboard/1.0 (https://github.com/highkick05/startarr; contact@startarr.app)' }, 
+        signal: AbortSignal.timeout(2500) 
+      });
       if (genRes.ok) {
         const genData: any = await genRes.json();
         const genPages = genData.query?.pages || {};
@@ -789,19 +801,22 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
 
   // 3. Clean candidate slugs for repository search (Homarr, Selfh.st, Walkxcode, SimpleIcons, DashboardIcons)
   const finalTitle = getBetterTitle(pageTitle || '', baseUrl.href);
+  const cleanBrand = (finalTitle || '').split(/[-|–|—|:•·]/)[0].trim();
   const searchSlug = query ? query.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
   const titleSlug = finalTitle ? finalTitle.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+  const cleanBrandSlug = cleanBrand ? cleanBrand.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
   const brandSlug = actualBrand ? actualBrand.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
   const domainPart = baseUrl.hostname.replace(/^www\./, '').split('.')[0];
   const domainSlug = domainPart ? domainPart.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
 
   // Extract individual words from title and brand (e.g. "EZTV - TV Torrents" -> "eztv", "torrents")
-  const titleWords = (finalTitle || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !['official', 'home', 'website', 'online', 'download', 'series'].includes(w));
+  const titleWords = (finalTitle || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !['official', 'home', 'website', 'online', 'download', 'series', 'torrent', 'torrents'].includes(w));
   const strippedBrand = brandSlug.replace(/(x|to|app|tv|online|re|io|ws|is)$/, '');
 
   const candidateSlugs = [...new Set([
-    brandSlug, 
+    cleanBrandSlug,
     strippedBrand, 
+    brandSlug, 
     searchSlug, 
     titleSlug, 
     domainSlug, 
@@ -835,17 +850,27 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
   }
 
   // 4. Query Wikipedia / Wikimedia Commons for official brand / site logos (300px - 500px HQ)
-  const wikiQueries = [actualBrand, finalTitle, query].filter(Boolean) as string[];
-  for (const wq of wikiQueries.slice(0, 2)) {
+  const wikiQueries = [
+    cleanBrand,
+    strippedBrand,
+    actualBrand,
+    query,
+    ...titleWords.slice(0, 2)
+  ].filter(w => w && w.length >= 3 && !['official', 'home', 'website', 'online', 'download', 'series', 'torrent', 'torrents'].includes(w.toLowerCase()));
+  const uniqueWikiQueries = [...new Set(wikiQueries)];
+
+  for (const wq of uniqueWikiQueries.slice(0, 3)) {
     const wikiLogos = await getWikimediaLogos(wq);
     if (wikiLogos.length > 0) {
       hdIcons.unshift(...wikiLogos);
     }
   }
 
-  if (query && query.trim()) {
-    const queryIcons = searchVerifiedIcons(query.trim(), 20);
-    hdIcons.unshift(...queryIcons);
+  // Automatically search verified icon catalogs for query, clean brand, and stripped brand
+  const autoSearchTerms = [query, cleanBrand, strippedBrand].filter(t => t && t.trim().length >= 3) as string[];
+  for (const ast of [...new Set(autoSearchTerms)].slice(0, 2)) {
+    const verifiedMatches = searchVerifiedIcons(ast.trim(), 15);
+    hdIcons.unshift(...verifiedMatches);
   }
 
   // Also include domain services (Unavatar, FaviconKit 144px, Google Favicon V2 and icon.horse) for actual domain

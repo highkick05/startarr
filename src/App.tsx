@@ -64,6 +64,22 @@ export const getFaviconUrl = (url: string) => {
   }
 };
 
+export const getIconQualityScore = (ico: string): number => {
+  if (!ico) return 0;
+  if (ico.includes('homarr-labs/dashboard-icons')) return 100;
+  if (ico.includes('selfhst/icons')) return 95;
+  if (ico.includes('walkxcode/dashboard-icons')) return 90;
+  if (ico.includes('cdn.simpleicons.org') && !isMonochromeOrBlackIcon(ico)) return 85;
+  if ((ico.includes('wikimedia.org') || ico.includes('wikipedia.org')) && !ico.toLowerCase().includes('screenshot') && !ico.toLowerCase().includes('fools')) return 80;
+  if ((ico.includes('logo') || ico.includes('apple-touch-icon') || ico.includes('brand')) && !ico.toLowerCase().endsWith('.ico')) return 75;
+  if (ico.includes('unavatar.io')) return 60;
+  if (ico.includes('faviconkit.com')) return 55;
+  if (ico.includes('icon.horse')) return 40;
+  if (ico.includes('gstatic.com/faviconV2')) return 30;
+  if (isMonochromeOrBlackIcon(ico)) return 10;
+  return 50;
+};
+
 export const pickBestColouredIcon = (icons: string[], url?: string): string => {
   if (!icons || icons.length === 0) {
     return url ? getFaviconUrl(url) : '/default-globe.svg';
@@ -73,33 +89,60 @@ export const pickBestColouredIcon = (icons: string[], url?: string): string => {
   const coloured = valid.filter(i => !isMonochromeOrBlackIcon(i));
 
   if (coloured.length > 0) {
-    // 1. Walkxcode dashboard colored vector / PNG
+    // 1. Homarr Dashboard Icons (vector SVG first, then PNG)
+    const homarrSvg = coloured.find(i => i.includes('homarr-labs/dashboard-icons') && i.endsWith('.svg'));
+    if (homarrSvg) return homarrSvg;
+    const homarrPng = coloured.find(i => i.includes('homarr-labs/dashboard-icons') && i.endsWith('.png'));
+    if (homarrPng) return homarrPng;
+
+    // 2. Selfh.st Icons (vector SVG first, then PNG)
+    const selfhstSvg = coloured.find(i => i.includes('selfhst/icons') && i.endsWith('.svg'));
+    if (selfhstSvg) return selfhstSvg;
+    const selfhstPng = coloured.find(i => i.includes('selfhst/icons') && i.endsWith('.png'));
+    if (selfhstPng) return selfhstPng;
+
+    // 3. Walkxcode dashboard colored vector / PNG
     const walkxSvg = coloured.find(i => i.includes('walkxcode/dashboard-icons') && i.endsWith('.svg'));
     if (walkxSvg) return walkxSvg;
-
     const walkxPng = coloured.find(i => i.includes('walkxcode/dashboard-icons') && i.endsWith('.png'));
     if (walkxPng) return walkxPng;
 
-    // 2. SimpleIcons official brand-color vector
+    // 4. SimpleIcons official brand-color vector
     const simpleColoured = coloured.find(i => i.includes('cdn.simpleicons.org') && !isMonochromeOrBlackIcon(i));
     if (simpleColoured) return simpleColoured;
 
-    // 3. High-res site logo or apple touch icon
+    // 5. Official Wikipedia / Wikimedia Commons Brand Logo (e.g. EZTV, The Pirate Bay, 1337x)
+    const wikiLogo = coloured.find(i => 
+      (i.includes('wikimedia.org') || i.includes('wikipedia.org')) && 
+      !i.toLowerCase().includes('screenshot') &&
+      !i.toLowerCase().includes('fools')
+    );
+    if (wikiLogo) return wikiLogo;
+
+    // 6. High-res site logo or apple touch icon
     const siteLogo = coloured.find(i => 
       (i.includes('logo') || i.includes('apple-touch-icon') || i.includes('brand')) && 
       !i.toLowerCase().endsWith('.ico')
     );
     if (siteLogo) return siteLogo;
 
-    // 4. Authentic domain social favicon (128px)
-    const gFavicon = coloured.find(i => i.includes('gstatic.com/faviconV2'));
-    if (gFavicon) return gFavicon;
+    // 7. Unavatar high-resolution domain logo
+    const unavatar = coloured.find(i => i.includes('unavatar.io'));
+    if (unavatar) return unavatar;
 
-    // 5. icon.horse domain icon
+    // 8. FaviconKit 144px high-res
+    const faviconkit = coloured.find(i => i.includes('faviconkit.com'));
+    if (faviconkit) return faviconkit;
+
+    // 9. icon.horse domain icon
     const horse = coloured.find(i => i.includes('icon.horse'));
     if (horse) return horse;
 
-    // 6. First non-ico colored candidate
+    // 10. Authentic domain social favicon (128px) - last resort fallback
+    const gFavicon = coloured.find(i => i.includes('gstatic.com/faviconV2'));
+    if (gFavicon) return gFavicon;
+
+    // 11. First non-ico colored candidate
     const nonIco = coloured.find(i => !i.toLowerCase().endsWith('.ico'));
     if (nonIco) return nonIco;
 
@@ -163,6 +206,39 @@ export default function App() {
               h: (p.type === 'app' && p.h < 8) ? 8 : (p.type === 'category' && p.h < 4 ? 4 : (p.type === 'container' && p.h < 8 ? p.h * 8 : p.h))
             })));
             // Also need to re-render grid since API loaded!
+
+            // Background upgrade: If any app shortcut is still using a low-quality gstatic favicon, globe, or generic icon,
+            // query scrape-metadata to heal it with verified high-res brand logos (Wikimedia, Homarr, Selfh.st, Walkxcode)
+            const lowQualityApps = parsed.filter((p: any) => 
+              p?.type === 'app' && 
+              p?.url && 
+              p?.url.startsWith('http') &&
+              (!p.iconUrl || p.iconUrl.includes('gstatic.com/faviconV2') || p.iconUrl.includes('default-globe.svg') || isMonochromeOrBlackIcon(p.iconUrl))
+            );
+            if (lowQualityApps.length > 0) {
+              setTimeout(() => {
+                for (const item of lowQualityApps) {
+                  const brand = getDomainBrand(item.url);
+                  const titleClean = (item.title || '').split(/[-|–|—|:•·]/)[0].trim();
+                  fetch('/api/scrape-metadata', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: item.url, query: brand || titleClean || '' })
+                  })
+                  .then(r => r.json())
+                  .then(data => {
+                    if (data && Array.isArray(data.icons) && data.icons.length > 0) {
+                      const best = pickBestColouredIcon(data.icons, item.url);
+                      if (best && getIconQualityScore(best) > getIconQualityScore(item.iconUrl || '')) {
+                        updateShortcutDynamically(item.id, { iconUrl: best });
+                      }
+                    }
+                  })
+                  .catch(() => {});
+                }
+              }, 500);
+            }
           }
         } catch (e) {}
       }
@@ -442,11 +518,24 @@ export default function App() {
             !i.toLowerCase().includes('.ico?') && 
             !i.toLowerCase().includes('favicon.ico')
           );
-          setContextMenu(prev => ({
-            ...prev,
-            isScanning: false,
-            extraIcons: [...new Set([...(prev.extraIcons || []), ...hdScraped])]
-          }));
+          setContextMenu(prev => {
+            const currentIcon = prev.shortcut?.iconUrl || '';
+            const bestScraped = pickBestColouredIcon(hdScraped, targetUrl);
+            const shouldAutoUpgrade = bestScraped && 
+              getIconQualityScore(bestScraped) > getIconQualityScore(currentIcon) &&
+              (currentIcon.includes('gstatic.com/faviconV2') || currentIcon.includes('default-globe.svg') || isMonochromeOrBlackIcon(currentIcon));
+            
+            if (shouldAutoUpgrade && prev.shortcut) {
+              updateShortcutDynamically(prev.shortcut.id, { iconUrl: bestScraped });
+            }
+
+            return {
+              ...prev,
+              isScanning: false,
+              shortcut: shouldAutoUpgrade && prev.shortcut ? { ...prev.shortcut, iconUrl: bestScraped } : prev.shortcut,
+              extraIcons: [...new Set([...(prev.extraIcons || []), ...hdScraped])]
+            };
+          });
         } else {
           setContextMenu(prev => ({ ...prev, isScanning: false }));
         }
@@ -937,7 +1026,9 @@ export default function App() {
               setSearchedIcons([]);
               setFailedIconUrls(new Set());
               if (found.url && found.type !== 'container') {
-                scanQuickIcons(found.url, '');
+                const brand = getDomainBrand(found.url);
+                const titleClean = (found.title || '').split(/[-|–|—|:•·]/)[0].trim();
+                scanQuickIcons(found.url, brand || titleClean || '');
               }
             }
             return prev;
@@ -1365,11 +1456,12 @@ export default function App() {
         addWidgetToGrid(newItem);
 
         // Fetch metadata in the background
+        const brandQuery = getDomainBrand(formattedUrl) || '';
         fetch('/api/scrape-metadata', {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: formattedUrl })
+          body: JSON.stringify({ url: formattedUrl, query: brandQuery })
         })
         .then(res => res.json())
         .then(data => {
@@ -1570,11 +1662,12 @@ export default function App() {
                         addWidgetToGrid(newItem);
 
                         // Fetch metadata in the background
+                        const brandQuery = getDomainBrand(formattedUrl) || '';
                         fetch('/api/scrape-metadata', {
                           method: 'POST',
                           credentials: 'include',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ url: formattedUrl })
+                          body: JSON.stringify({ url: formattedUrl, query: brandQuery })
                         })
                         .then(res => res.json())
                         .then(data => {
@@ -2056,9 +2149,10 @@ export default function App() {
                   const slug3 = domainClean.toLowerCase().replace(/[^a-z0-9]/g, '');
                   const slug4 = actualBrand.toLowerCase().replace(/[^a-z0-9]/g, '');
                   const slug5 = actualDomain ? actualDomain.replace(/[^a-z0-9]/g, '') : '';
+                  const slug6 = actualBrand.toLowerCase().replace(/(x|to|app|tv|online|re|io|ws|is)$/, '');
 
                   // STRICT: Slugs must have length >= 3 to prevent single-letter collisions like 'c' matching Coinbase!
-                  const slugs = [...new Set([slug1, slug2, slug3, slug4, slug5].filter(s => s && s.length >= 3))];
+                  const slugs = [...new Set([slug1, slug2, slug3, slug4, slug5, slug6].filter(s => s && s.length >= 3))];
                   
                   let candidateIcons: string[] = [];
 
@@ -2072,14 +2166,13 @@ export default function App() {
                   } else {
                     // Default view: Show site scraped icons, and domain/slug icons (never default globe)
                     const defaults: string[] = [];
-                    // Always include the shortcut's current icon at the front if valid
+                    if (contextMenu.extraIcons && contextMenu.extraIcons.length > 0) {
+                      defaults.push(...contextMenu.extraIcons);
+                    }
                     if (contextMenu.shortcut?.iconUrl && 
                         contextMenu.shortcut.iconUrl !== '/default-globe.svg' && 
                         !contextMenu.shortcut.iconUrl.includes('default-globe.svg')) {
                       defaults.push(contextMenu.shortcut.iconUrl);
-                    }
-                    if (contextMenu.extraIcons && contextMenu.extraIcons.length > 0) {
-                      defaults.push(...contextMenu.extraIcons);
                     }
                     if (actualDomain) {
                       defaults.push(`https://unavatar.io/${actualDomain}?fallback=false`);
@@ -2118,10 +2211,11 @@ export default function App() {
                     !ico.toLowerCase().includes('favicon.ico')
                   );
 
-                  // Always show HQ coloured and original logos first; custom monochrome (black/white) variants at the end
+                  // Always show HQ coloured and original logos first sorted by quality score; custom monochrome (black/white) variants at the end
                   const colouredOptions = validRaw.filter(ico => !isMonochromeOrBlackIcon(ico));
+                  const sortedColoured = [...colouredOptions].sort((a, b) => getIconQualityScore(b) - getIconQualityScore(a));
                   const monoOptions = validRaw.filter(ico => isMonochromeOrBlackIcon(ico));
-                  const displayedIcons = [...colouredOptions, ...monoOptions];
+                  const displayedIcons = [...sortedColoured, ...monoOptions];
                   
                   return (
                     <div className="flex flex-col space-y-2 mt-3">
