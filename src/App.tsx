@@ -257,7 +257,7 @@ export default function App() {
           
           if (updates.iconUrl !== undefined || updates.url !== undefined || updates.title !== undefined) {
              imgEl.src = item.iconUrl || primaryIcon;
-             imgEl.setAttribute('onload', `if((this.naturalWidth > 0 && this.naturalWidth < 48) || this.naturalHeight < 48) { this.onerror=null; this.src='${defaultIcon}'; }`);
+             imgEl.setAttribute('onload', `if(this.naturalWidth > 0 && this.naturalWidth <= 1 && this.naturalHeight <= 1) { this.onerror=null; this.src='${defaultIcon}'; }`);
              imgEl.setAttribute('onerror', `this.onerror=null; this.src='${defaultIcon}';`);
              imgEl.dataset.fallback = '0';
           }
@@ -321,20 +321,7 @@ export default function App() {
     ];
   });
 
-  // Automatically upgrade any low-res / pixelated icons (like 16x16 gstatic globe) to the crisp vector globe
-  useEffect(() => {
-    const upgradeLowRes = () => {
-      document.querySelectorAll('.grid-stack-item img').forEach((img: any) => {
-        if (img.naturalWidth > 0 && (img.naturalWidth < 48 || img.naturalHeight < 48)) {
-          img.src = '/default-globe.svg';
-        }
-      });
-    };
-    const t1 = setTimeout(upgradeLowRes, 400);
-    const t2 = setTimeout(upgradeLowRes, 1200);
-    const t3 = setTimeout(upgradeLowRes, 3000);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
-  }, [shortcuts]);
+
 
   const getMaxColumns = (size = layoutSize) => {
     if (size === 'small') return 24;
@@ -1108,7 +1095,7 @@ export default function App() {
       const primaryIcon = item.iconUrl || (actualDomain ? `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${actualDomain}&size=128` : (domain ? `https://icon.horse/icon/${domain}` : defaultIcon));
       const iconUrl = primaryIcon;
       
-      const onloadAttr = `onload="if((this.naturalWidth > 0 && this.naturalWidth < 48) || this.naturalHeight < 48) { this.onerror=null; this.src='${defaultIcon}'; }"`;
+      const onloadAttr = `onload="if(this.naturalWidth > 0 && this.naturalWidth <= 1 && this.naturalHeight <= 1) { this.onerror=null; this.src='${defaultIcon}'; }"`;
       const onerrorAttr = `onerror="this.onerror=null; this.src='${defaultIcon}';"`;
 
       htmlContent = `
@@ -1635,7 +1622,7 @@ export default function App() {
                              src={app.iconUrl || getFaviconUrl(app.url)} 
                              onLoad={(e) => {
                                const target = e.currentTarget;
-                               if (target.naturalWidth > 0 && target.naturalWidth < 48) {
+                               if (target.naturalWidth > 0 && target.naturalWidth <= 1 && target.naturalHeight <= 1) {
                                  target.onerror = null;
                                  target.src = '/default-globe.svg';
                                }
@@ -1675,7 +1662,7 @@ export default function App() {
                              src={getFaviconUrl(res.url)}
                              onLoad={(e) => {
                                const target = e.currentTarget;
-                               if (target.naturalWidth > 0 && target.naturalWidth < 48) {
+                               if (target.naturalWidth > 0 && target.naturalWidth <= 1 && target.naturalHeight <= 1) {
                                  target.onerror = null;
                                  target.src = '/default-globe.svg';
                                }
@@ -1990,7 +1977,7 @@ export default function App() {
                       }} 
                       onLoad={(e) => {
                         const target = e.currentTarget;
-                        if (target.naturalWidth > 0 && target.naturalWidth < 48) {
+                        if (target.naturalWidth > 0 && target.naturalWidth <= 1 && target.naturalHeight <= 1) {
                           target.onerror = null;
                           target.src = '/default-globe.svg';
                         }
@@ -2085,21 +2072,34 @@ export default function App() {
                   } else {
                     // Default view: Show site scraped icons, and domain/slug icons (never default globe)
                     const defaults: string[] = [];
+                    // Always include the shortcut's current icon at the front if valid
+                    if (contextMenu.shortcut?.iconUrl && 
+                        contextMenu.shortcut.iconUrl !== '/default-globe.svg' && 
+                        !contextMenu.shortcut.iconUrl.includes('default-globe.svg')) {
+                      defaults.push(contextMenu.shortcut.iconUrl);
+                    }
                     if (contextMenu.extraIcons && contextMenu.extraIcons.length > 0) {
                       defaults.push(...contextMenu.extraIcons);
                     }
                     if (actualDomain) {
+                      defaults.push(`https://unavatar.io/${actualDomain}?fallback=false`);
+                      defaults.push(`https://api.faviconkit.com/${actualDomain}/144`);
                       defaults.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${actualDomain}&size=128`);
-                      defaults.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://www.${actualDomain}&size=128`);
                       defaults.push(`https://icon.horse/icon/${actualDomain}`);
                     }
-                    if (domain && domain !== actualDomain && domain !== `www.${actualDomain}`) {
+                    if (domain && domain !== actualDomain) {
+                      defaults.push(`https://unavatar.io/${domain}?fallback=false`);
+                      defaults.push(`https://api.faviconkit.com/${domain}/144`);
                       defaults.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`);
                       defaults.push(`https://icon.horse/icon/${domain}`);
                     }
                     for (const s of slugs) {
+                      defaults.push(`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${s}.svg`);
+                      defaults.push(`https://cdn.jsdelivr.net/gh/selfhst/icons/svg/${s}.svg`);
                       defaults.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/${s}.svg`);
                       defaults.push(`https://cdn.simpleicons.org/${s}`);
+                      defaults.push(`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/${s}.png`);
+                      defaults.push(`https://cdn.jsdelivr.net/gh/selfhst/icons/png/${s}.png`);
                       defaults.push(`https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/${s}.png`);
                       defaults.push(`https://cdn.simpleicons.org/${s}/white`);
                       defaults.push(`https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${s}.svg`);
@@ -2214,13 +2214,15 @@ export default function App() {
                                      onLoad={(e) => {
                                         const img = e.currentTarget;
                                         const isSvg = ico.toLowerCase().includes('.svg') || ico.includes('cdn.simpleicons.org');
-                                        // Strictly exclude low quality icons (< 48px width or height)
+                                        // Strictly eliminate low quality icons (< 48px width or height) to keep out pixelated images
                                         if (!isSvg && img.naturalWidth > 0 && (img.naturalWidth < 48 || img.naturalHeight < 48)) {
                                            setFailedIconUrls(prev => new Set(prev).add(ico));
                                         }
                                      }}
                                      onError={() => { 
-                                        setFailedIconUrls(prev => new Set(prev).add(ico));
+                                        if (ico !== contextMenu.shortcut?.iconUrl) {
+                                           setFailedIconUrls(prev => new Set(prev).add(ico));
+                                        }
                                      }} 
                                   />
                                </button>

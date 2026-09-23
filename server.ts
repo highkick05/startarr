@@ -24,13 +24,21 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
-// Load verified icon catalogs for Simple Icons and Dashboard Icons
+// Load verified icon catalogs for Simple Icons, Dashboard Icons, Homarr Labs, and Selfh.st
 const dashIconsPath = path.join(process.cwd(), "src/data/dashboard-icons-list.json");
 const simpleIconsPath = path.join(process.cwd(), "src/data/simple-icons-list.json");
+const homarrIconsPath = path.join(process.cwd(), "src/data/homarr-icons-list.json");
+const selfhstIconsPath = path.join(process.cwd(), "src/data/selfhst-icons-list.json");
+
 let dashIconsList: string[] = [];
 let simpleIconsList: string[] = [];
+let homarrIconsList: string[] = [];
+let selfhstIconsList: string[] = [];
+
 let dashIconsSet = new Set<string>();
 let simpleIconsSet = new Set<string>();
+let homarrIconsSet = new Set<string>();
+let selfhstIconsSet = new Set<string>();
 
 try {
   if (fs.existsSync(dashIconsPath)) {
@@ -41,8 +49,73 @@ try {
     simpleIconsList = JSON.parse(fs.readFileSync(simpleIconsPath, "utf-8"));
     simpleIconsSet = new Set(simpleIconsList.map(s => s.toLowerCase()));
   }
+  if (fs.existsSync(homarrIconsPath)) {
+    homarrIconsList = JSON.parse(fs.readFileSync(homarrIconsPath, "utf-8"));
+    homarrIconsSet = new Set(homarrIconsList.map(s => s.toLowerCase()));
+  }
+  if (fs.existsSync(selfhstIconsPath)) {
+    selfhstIconsList = JSON.parse(fs.readFileSync(selfhstIconsPath, "utf-8"));
+    selfhstIconsSet = new Set(selfhstIconsList.map(s => s.toLowerCase()));
+  }
 } catch (e) {
   console.error("Error reading icon catalogs:", e);
+}
+
+// Fetch official high-res brand logos from Wikipedia / Wikimedia Commons
+async function getWikimediaLogos(term: string): Promise<string[]> {
+  if (!term || term.trim().length < 3) return [];
+  const clean = term.replace(/[^a-zA-Z0-9\s]/g, ' ').trim();
+  const queries = [clean];
+  const firstWord = clean.split(/\s+/)[0];
+  if (firstWord && firstWord.toLowerCase() !== clean.toLowerCase() && firstWord.length >= 3) {
+    queries.push(firstWord);
+  }
+
+  const results: string[] = [];
+  const junkWords = ['commons', 'symbol', 'share', 'arrow', 'ambox', 'flag', 'question', 'edit', 'disambig', 'portal', 'wikidata', 'wikimedia', 'stub', 'padlock', 'copyright', 'free-software-license'];
+
+  for (const q of queries.slice(0, 2)) {
+    try {
+      // 1. Check primary infobox pageimage for the topic
+      const pageUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(q)}&prop=pageimages&pithumbsize=500&format=json`;
+      const pageRes = await fetch(pageUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(2000) });
+      if (pageRes.ok) {
+        const pageData: any = await pageRes.json();
+        const pages = pageData.query?.pages || {};
+        for (const pid of Object.keys(pages)) {
+          if (pid !== '-1' && pages[pid].thumbnail?.source) {
+            const src = pages[pid].thumbnail.source;
+            const lowerSrc = src.toLowerCase();
+            if (!junkWords.some(j => lowerSrc.includes(j)) && !results.includes(src)) {
+              results.push(src);
+            }
+          }
+        }
+      }
+
+      // 2. Query images inside the page
+      const genUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(q)}&generator=images&gimlimit=10&prop=imageinfo&iiprop=url|size&format=json`;
+      const genRes = await fetch(genUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(2000) });
+      if (genRes.ok) {
+        const genData: any = await genRes.json();
+        const genPages = genData.query?.pages || {};
+        for (const pid of Object.keys(genPages)) {
+          const page = genPages[pid];
+          const pageTitle = (page.title || '').toLowerCase();
+          const isJunk = junkWords.some(j => pageTitle.includes(j));
+          const isRelevant = pageTitle.includes('logo') || pageTitle.includes(q.toLowerCase()) || pageTitle.includes('icon');
+          if (isRelevant && !isJunk) {
+            for (const ii of page.imageinfo || []) {
+              if (ii.url && (ii.width >= 48 || ii.height >= 48 || ii.url.endsWith('.svg')) && !results.includes(ii.url)) {
+                results.push(ii.url);
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+  return results;
 }
 
 async function getVerifiedWalkxcode(title: string) {
@@ -111,6 +184,32 @@ function searchVerifiedIcons(query: string, limit = 40): string[] {
     }
   };
 
+  const addHomarr = (item: string) => {
+    const svgUrl = `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${item}.svg`;
+    if (!seen.has(svgUrl)) {
+      seen.add(svgUrl);
+      results.push(svgUrl);
+    }
+    const pngUrl = `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/${item}.png`;
+    if (!seen.has(pngUrl)) {
+      seen.add(pngUrl);
+      results.push(pngUrl);
+    }
+  };
+
+  const addSelfhst = (item: string) => {
+    const svgUrl = `https://cdn.jsdelivr.net/gh/selfhst/icons/svg/${item}.svg`;
+    if (!seen.has(svgUrl)) {
+      seen.add(svgUrl);
+      results.push(svgUrl);
+    }
+    const pngUrl = `https://cdn.jsdelivr.net/gh/selfhst/icons/png/${item}.png`;
+    if (!seen.has(pngUrl)) {
+      seen.add(pngUrl);
+      results.push(pngUrl);
+    }
+  };
+
   const addSimple = (item: string) => {
     // 1. Official Brand Color vector (priority HQ colored)
     const colorUrl = `https://cdn.simpleicons.org/${item}`;
@@ -132,7 +231,13 @@ function searchVerifiedIcons(query: string, limit = 40): string[] {
     }
   };
 
-  // Tier 1: Exact matches (e.g. q === 'nba')
+  // Tier 1: Exact matches (e.g. q === '1337x' or 'eztv')
+  for (const item of homarrIconsList) {
+    if (item.toLowerCase() === q) addHomarr(item);
+  }
+  for (const item of selfhstIconsList) {
+    if (item.toLowerCase() === q) addSelfhst(item);
+  }
   for (const item of dashIconsList) {
     if (item.toLowerCase() === q) addDash(item);
   }
@@ -141,6 +246,14 @@ function searchVerifiedIcons(query: string, limit = 40): string[] {
   }
 
   // Tier 2: Slug starts with query as prefix (e.g. 'nba-' or 'nba_')
+  for (const item of homarrIconsList) {
+    const s = item.toLowerCase();
+    if (s.startsWith(q + '-') || s.startsWith(q + '_')) addHomarr(item);
+  }
+  for (const item of selfhstIconsList) {
+    const s = item.toLowerCase();
+    if (s.startsWith(q + '-') || s.startsWith(q + '_')) addSelfhst(item);
+  }
   for (const item of dashIconsList) {
     const s = item.toLowerCase();
     if (s.startsWith(q + '-') || s.startsWith(q + '_')) addDash(item);
@@ -151,6 +264,14 @@ function searchVerifiedIcons(query: string, limit = 40): string[] {
   }
 
   // Tier 3: Word token exact match (e.g. 'espn-nba' has token 'nba')
+  for (const item of homarrIconsList) {
+    const tokens = item.toLowerCase().replace(/_/g, '-').split('-');
+    if (tokens.includes(q)) addHomarr(item);
+  }
+  for (const item of selfhstIconsList) {
+    const tokens = item.toLowerCase().replace(/_/g, '-').split('-');
+    if (tokens.includes(q)) addSelfhst(item);
+  }
   for (const item of dashIconsList) {
     const tokens = item.toLowerCase().replace(/_/g, '-').split('-');
     if (tokens.includes(q)) addDash(item);
@@ -160,8 +281,22 @@ function searchVerifiedIcons(query: string, limit = 40): string[] {
     if (tokens.includes(q)) addSimple(item);
   }
 
-  // Tier 4: Token prefix match for search length >= 3 (e.g. 'dev' matches 'chrome-dev', 'developer')
+  // Tier 4: Token prefix match for search length >= 3
   if (q.length >= 3 && results.length < limit) {
+    for (const item of homarrIconsList) {
+      const tokens = item.toLowerCase().replace(/_/g, '-').split('-');
+      if (tokens.some(t => t.startsWith(q))) {
+        addHomarr(item);
+        if (results.length >= limit) break;
+      }
+    }
+    for (const item of selfhstIconsList) {
+      const tokens = item.toLowerCase().replace(/_/g, '-').split('-');
+      if (tokens.some(t => t.startsWith(q))) {
+        addSelfhst(item);
+        if (results.length >= limit) break;
+      }
+    }
     for (const item of dashIconsList) {
       const tokens = item.toLowerCase().replace(/_/g, '-').split('-');
       if (tokens.some(t => t.startsWith(q))) {
@@ -180,6 +315,18 @@ function searchVerifiedIcons(query: string, limit = 40): string[] {
 
   // Tier 5: Whole slug starts with query for longer queries (length >= 4)
   if (q.length >= 4 && results.length < limit) {
+    for (const item of homarrIconsList) {
+      if (item.toLowerCase().startsWith(q)) {
+        addHomarr(item);
+        if (results.length >= limit) break;
+      }
+    }
+    for (const item of selfhstIconsList) {
+      if (item.toLowerCase().startsWith(q)) {
+        addSelfhst(item);
+        if (results.length >= limit) break;
+      }
+    }
     for (const item of dashIconsList) {
       if (item.toLowerCase().startsWith(q)) {
         addDash(item);
@@ -513,7 +660,9 @@ function extractIconsFromHtml(html: string, baseUrl: URL, query = ''): string[] 
   }).filter((icon): icon is string => {
     if (!icon) return false;
     const l = icon.toLowerCase();
-    return !l.endsWith('.ico') && !l.includes('.ico?') && !l.includes('favicon.ico');
+    if (l.endsWith('.ico') || l.includes('.ico?') || l.includes('favicon.ico')) return false;
+    if (l.includes('feed-icon') || l.includes('rss-icon') || l.includes('14x14') || l.includes('spacer') || l.includes('pixel')) return false;
+    return true;
   });
 }
 
@@ -602,11 +751,7 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
       try {
         const gRes = await fetch(gUrl, { signal: AbortSignal.timeout(1500) });
         if (gRes.ok) {
-          const gBuf = await gRes.arrayBuffer();
-          // Filter out tiny 16x16 fallbacks (< 800 bytes)
-          if (gBuf.byteLength > 800) {
-            hdIcons.push(gUrl);
-          }
+          hdIcons.push(gUrl);
         }
       } catch {}
     }));
@@ -642,7 +787,7 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
     ));
   }
 
-  // 3. Clean candidate slugs for repository search (Walkxcode, SimpleIcons, DashboardIcons)
+  // 3. Clean candidate slugs for repository search (Homarr, Selfh.st, Walkxcode, SimpleIcons, DashboardIcons)
   const finalTitle = getBetterTitle(pageTitle || '', baseUrl.href);
   const searchSlug = query ? query.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
   const titleSlug = finalTitle ? finalTitle.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
@@ -650,12 +795,31 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
   const domainPart = baseUrl.hostname.replace(/^www\./, '').split('.')[0];
   const domainSlug = domainPart ? domainPart.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
 
-  const candidateSlugs = [...new Set([brandSlug, searchSlug, titleSlug, domainSlug].filter(s => s && s.length >= 3))];
+  // Extract individual words from title and brand (e.g. "EZTV - TV Torrents" -> "eztv", "torrents")
+  const titleWords = (finalTitle || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !['official', 'home', 'website', 'online', 'download', 'series'].includes(w));
+  const strippedBrand = brandSlug.replace(/(x|to|app|tv|online|re|io|ws|is)$/, '');
+
+  const candidateSlugs = [...new Set([
+    brandSlug, 
+    strippedBrand, 
+    searchSlug, 
+    titleSlug, 
+    domainSlug, 
+    ...titleWords
+  ].filter(s => s && s.length >= 3))];
 
   for (const slug of candidateSlugs) {
     const validWalkx = await getVerifiedWalkxcode(slug);
     if (validWalkx.length > 0) {
       hdIcons.unshift(...validWalkx);
+    }
+    if (homarrIconsSet.has(slug)) {
+      hdIcons.push(`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${slug}.svg`);
+      hdIcons.push(`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/${slug}.png`);
+    }
+    if (selfhstIconsSet.has(slug)) {
+      hdIcons.push(`https://cdn.jsdelivr.net/gh/selfhst/icons/svg/${slug}.svg`);
+      hdIcons.push(`https://cdn.jsdelivr.net/gh/selfhst/icons/png/${slug}.png`);
     }
     if (simpleIconsSet.has(slug)) {
       // 1. Official Brand Color vector (priority HQ colored)
@@ -670,13 +834,25 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
     }
   }
 
+  // 4. Query Wikipedia / Wikimedia Commons for official brand / site logos (300px - 500px HQ)
+  const wikiQueries = [actualBrand, finalTitle, query].filter(Boolean) as string[];
+  for (const wq of wikiQueries.slice(0, 2)) {
+    const wikiLogos = await getWikimediaLogos(wq);
+    if (wikiLogos.length > 0) {
+      hdIcons.unshift(...wikiLogos);
+    }
+  }
+
   if (query && query.trim()) {
     const queryIcons = searchVerifiedIcons(query.trim(), 20);
     hdIcons.unshift(...queryIcons);
   }
 
-  // Also include icon.horse for actual domain
+  // Also include domain services (Unavatar, FaviconKit 144px, Google Favicon V2 and icon.horse) for actual domain
   if (actualDomain) {
+    hdIcons.push(`https://unavatar.io/${actualDomain}?fallback=false`);
+    hdIcons.push(`https://api.faviconkit.com/${actualDomain}/144`);
+    hdIcons.push(`https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${actualDomain}&size=128`);
     hdIcons.push(`https://icon.horse/icon/${actualDomain}`);
   }
 
