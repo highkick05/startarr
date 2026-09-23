@@ -843,14 +843,51 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
         )}
       </div>
 
-      {/* Connection Settings Popup Modal rendered via createPortal to break out of widget bounding box */}
+      {/* Connection Settings Popup Modal rendered via createPortal */}
       {showConnectDialog && typeof document !== 'undefined' && createPortal(
         <div 
-          className="fixed inset-0 z-[99999999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-100"
-          onClick={() => setShowConnectDialog(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100vw',
+            height: '100vh',
+            zIndex: 99999999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
         >
+          {/* Dedicated Full-Screen Backdrop */}
           <div 
-            className="w-full max-w-[320px] bg-neutral-900/95 border border-neutral-700/80 rounded-xl p-3.5 shadow-2xl space-y-2.5 text-neutral-200 animate-in zoom-in-95 duration-100 my-auto"
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.65)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+              zIndex: 1
+            }}
+            onClick={() => setShowConnectDialog(false)}
+          />
+
+          {/* Compact Centered Dialog Box (Explicit 320px width) */}
+          <div 
+            style={{
+              position: 'relative',
+              zIndex: 2,
+              width: '320px',
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              boxSizing: 'border-box'
+            }}
+            className="bg-neutral-900 border border-neutral-700/80 rounded-xl p-3.5 shadow-2xl space-y-2.5 text-neutral-200 overflow-y-auto no-scrollbar"
             onClick={e => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -1056,11 +1093,47 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
       {/* Saved SSH Profiles Modal rendered via createPortal */}
       {showProfilesModal && typeof document !== 'undefined' && createPortal(
         <div 
-          className="fixed inset-0 z-[99999999] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-100"
-          onClick={() => setShowProfilesModal(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100vw',
+            height: '100vh',
+            zIndex: 99999999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
         >
+          {/* Backdrop */}
           <div 
-            className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-2xl text-neutral-200 space-y-4 max-h-[85vh] flex flex-col my-auto animate-in zoom-in-95 duration-100"
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+              zIndex: 1
+            }}
+            onClick={() => setShowProfilesModal(false)}
+          />
+
+          <div 
+            style={{
+              position: 'relative',
+              zIndex: 2,
+              width: '420px',
+              maxWidth: '90vw',
+              maxHeight: '85vh',
+              boxSizing: 'border-box'
+            }}
+            className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 shadow-2xl text-neutral-200 space-y-3.5 flex flex-col"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800 shrink-0">
