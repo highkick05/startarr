@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
@@ -842,18 +843,18 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
         )}
       </div>
 
-      {/* Connection Settings Popup Modal (Compact & Minimal Padding) */}
-      {showConnectDialog && (
+      {/* Connection Settings Popup Modal rendered via createPortal to break out of widget bounding box */}
+      {showConnectDialog && typeof document !== 'undefined' && createPortal(
         <div 
-          className="fixed inset-0 z-[1000001] bg-black/65 backdrop-blur-xs flex items-center justify-center p-3 animate-in fade-in duration-100"
+          className="fixed inset-0 z-[99999999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-100"
           onClick={() => setShowConnectDialog(false)}
         >
           <div 
-            className="w-full max-w-[325px] bg-neutral-900 border border-neutral-800 rounded-xl p-3 shadow-2xl space-y-2 text-neutral-200 animate-in zoom-in-95 duration-100 my-auto"
+            className="w-full max-w-[320px] bg-neutral-900/95 border border-neutral-700/80 rounded-xl p-3.5 shadow-2xl space-y-2.5 text-neutral-200 animate-in zoom-in-95 duration-100 my-auto"
             onClick={e => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-1.5 border-b border-neutral-800/80">
+            <div className="flex items-center justify-between pb-2 border-b border-neutral-800">
               <div className="flex items-center space-x-1.5">
                 <div className="w-5 h-5 rounded-md bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
                   <TerminalIcon size={12} />
@@ -861,7 +862,7 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
                 <h4 className="text-xs font-semibold text-neutral-100">SSH Connection Settings</h4>
               </div>
 
-              <div className="flex items-center space-x-1">
+              <div className="flex items-center space-x-1.5">
                 {profiles.length > 0 && (
                   <button
                     type="button"
@@ -1048,17 +1049,18 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Saved SSH Profiles Modal */}
-      {showProfilesModal && (
+      {/* Saved SSH Profiles Modal rendered via createPortal */}
+      {showProfilesModal && typeof document !== 'undefined' && createPortal(
         <div 
-          className="fixed inset-0 z-[1000000] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-[99999999] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-100"
           onClick={() => setShowProfilesModal(false)}
         >
           <div 
-            className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-2xl text-neutral-200 space-y-4 max-h-[85vh] flex flex-col"
+            className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-2xl text-neutral-200 space-y-4 max-h-[85vh] flex flex-col my-auto animate-in zoom-in-95 duration-100"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-neutral-800 shrink-0">
@@ -1132,7 +1134,8 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
