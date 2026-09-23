@@ -6,6 +6,7 @@ export interface ShortcutItem {
   iconUrl?: string;
   invertIcon?: boolean;
   iconBackground?: 'transparent' | 'white' | 'black';
+  isLoading?: boolean;
   x?: number;
   y?: number;
   sizeToContent?: boolean;

@@ -220,6 +220,7 @@ export default function App() {
                 for (const item of lowQualityApps) {
                   const brand = getDomainBrand(item.url);
                   const titleClean = (item.title || '').split(/[-|–|—|:•·]/)[0].trim();
+                  updateShortcutDynamically(item.id, { isLoading: true });
                   fetch('/api/scrape-metadata', {
                     method: 'POST',
                     credentials: 'include',
@@ -231,11 +232,18 @@ export default function App() {
                     if (data && Array.isArray(data.icons) && data.icons.length > 0) {
                       const best = pickBestColouredIcon(data.icons, item.url);
                       if (best && getIconQualityScore(best) > getIconQualityScore(item.iconUrl || '')) {
-                        updateShortcutDynamically(item.id, { iconUrl: best });
+                        updateShortcutDynamically(item.id, { iconUrl: best, isLoading: false });
+                        return;
                       }
                     }
+                    updateShortcutDynamically(item.id, { isLoading: false });
                   })
-                  .catch(() => {});
+                  .catch(() => {
+                    updateShortcutDynamically(item.id, { isLoading: false });
+                  })
+                  .finally(() => {
+                    updateShortcutDynamically(item.id, { isLoading: false });
+                  });
                 }
               }, 500);
             }
@@ -304,7 +312,16 @@ export default function App() {
         });
       };
       const updated = updateDeep(prev);
-      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+      const cleanForStorage = (list: ShortcutItem[]): ShortcutItem[] => {
+        return list.map(item => {
+          const { isLoading, ...rest } = item;
+          if (rest.children) {
+            return { ...rest, children: cleanForStorage(rest.children) };
+          }
+          return rest as ShortcutItem;
+        });
+      };
+      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(cleanForStorage(updated)) }) }).catch(console.error);
       return updated;
     });
     
@@ -347,6 +364,52 @@ export default function App() {
               wrapper.classList.add('p-2');
             } else {
               wrapper.classList.remove('p-2');
+            }
+          }
+
+          // Handle busy loading indicator (thinking spinner)
+          if (updates.isLoading !== undefined) {
+            const busyIndicator = imgWrapperEl.querySelector('.busy-indicator');
+            const busyBadge = imgWrapperEl.querySelector('.busy-badge');
+            if (updates.isLoading) {
+              if (!busyIndicator) {
+                const indicatorDiv = document.createElement('div');
+                indicatorDiv.className = 'busy-indicator absolute inset-0 flex items-center justify-center rounded-xl bg-black/45 backdrop-blur-[1px] pointer-events-none transition-all duration-300 z-10';
+                indicatorDiv.innerHTML = `
+                  <div class="relative flex items-center justify-center">
+                    <svg class="animate-spin w-5 h-5 text-blue-400 drop-shadow-[0_0_8px_rgba(59,130,246,0.8)]" viewBox="0 0 24 24" fill="none">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+                      <path class="opacity-95" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <div class="absolute w-1.5 h-1.5 rounded-full bg-blue-300 animate-ping"></div>
+                  </div>
+                `;
+                imgWrapperEl.appendChild(indicatorDiv);
+              }
+              if (!busyBadge) {
+                const badgeDiv = document.createElement('div');
+                badgeDiv.className = 'busy-badge absolute -top-1 -right-1 z-20 flex items-center justify-center w-4 h-4 rounded-full bg-blue-500 shadow-md shadow-blue-500/60 ring-2 ring-neutral-900 pointer-events-none';
+                badgeDiv.innerHTML = `
+                  <span class="relative flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-300 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-sky-100"></span>
+                  </span>
+                `;
+                imgWrapperEl.appendChild(badgeDiv);
+              }
+              imgEl.classList.add('opacity-50');
+              if (titleEl) {
+                titleEl.classList.add('animate-pulse', 'text-blue-300');
+                titleEl.classList.remove('opacity-90');
+              }
+            } else {
+              if (busyIndicator) busyIndicator.remove();
+              if (busyBadge) busyBadge.remove();
+              imgEl.classList.remove('opacity-50');
+              if (titleEl) {
+                titleEl.classList.remove('animate-pulse', 'text-blue-300');
+                titleEl.classList.add('opacity-90');
+              }
             }
           }
        }
@@ -1116,7 +1179,7 @@ export default function App() {
           ? childrenData.map(mapItem).filter(Boolean) as ShortcutItem[]
           : [];
 
-        const { el, subGrid, subGridOpts, content, ...restExisting } = existing as any;
+        const { el, subGrid, subGridOpts, content, isLoading, ...restExisting } = existing as any;
         return {
           ...restExisting,
           x: item.x,
@@ -1189,17 +1252,36 @@ export default function App() {
       const onloadAttr = `onload="if(this.naturalWidth > 0 && this.naturalWidth <= 1 && this.naturalHeight <= 1) { this.onerror=null; this.src='${defaultIcon}'; }"`;
       const onerrorAttr = `onerror="this.onerror=null; this.src='${defaultIcon}';"`;
 
+      const busyIndicatorHtml = item.isLoading ? `
+        <div class="busy-indicator absolute inset-0 flex items-center justify-center rounded-xl bg-black/45 backdrop-blur-[1px] pointer-events-none transition-all duration-300 z-10">
+          <div class="relative flex items-center justify-center">
+            <svg class="animate-spin w-5 h-5 text-blue-400 drop-shadow-[0_0_8px_rgba(59,130,246,0.8)]" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+              <path class="opacity-95" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <div class="absolute w-1.5 h-1.5 rounded-full bg-blue-300 animate-ping"></div>
+          </div>
+        </div>
+        <div class="busy-badge absolute -top-1 -right-1 z-20 flex items-center justify-center w-4 h-4 rounded-full bg-blue-500 shadow-md shadow-blue-500/60 ring-2 ring-neutral-900 pointer-events-none">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-300 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-sky-100"></span>
+          </span>
+        </div>
+      ` : '';
+
       htmlContent = `
         <div class="grid-stack-item-content relative group flex flex-col items-center justify-center cursor-grab active:cursor-grabbing transition-transform duration-300 hover:scale-105 hover:bg-neutral-800/30 rounded-2xl"
              onclick="if(!this.parentElement.classList.contains('ui-draggable-dragging') && !this.parentElement.classList.contains('grid-stack-item-dragging')) window.open('${item.url}', '_blank')">
 
           <div class="pointer-events-none w-full h-full flex flex-col items-center justify-between ${paddingClass}">
             <div class="flex-1 w-full min-h-0 flex items-center justify-center ${iconWrapperClass}">
-              <div style="height: 100%; aspect-ratio: 1/1; ${item.iconBackground === 'white' ? 'background-color: white;' : item.iconBackground === 'black' ? 'background-color: black;' : ''}" class="flex items-center justify-center rounded-xl ${(item.iconBackground === 'white' || item.iconBackground === 'black') ? 'p-2' : ''} shadow-sm drop-shadow-md hover:drop-shadow-xl transition-all duration-300">
-                <img src="${iconUrl}" ${onloadAttr} ${onerrorAttr} alt="${item.title}" draggable="false" style="width: 100%; height: 100%; object-fit: contain; ${item.invertIcon ? 'filter: invert(1);' : ''}" class="rounded-lg" />
+              <div style="height: 100%; aspect-ratio: 1/1; ${item.iconBackground === 'white' ? 'background-color: white;' : item.iconBackground === 'black' ? 'background-color: black;' : ''}" class="relative flex items-center justify-center rounded-xl ${(item.iconBackground === 'white' || item.iconBackground === 'black') ? 'p-2' : ''} shadow-sm drop-shadow-md hover:drop-shadow-xl transition-all duration-300">
+                <img src="${iconUrl}" ${onloadAttr} ${onerrorAttr} alt="${item.title}" draggable="false" style="width: 100%; height: 100%; object-fit: contain; ${item.invertIcon ? 'filter: invert(1);' : ''}" class="rounded-lg ${item.isLoading ? 'opacity-50' : ''}" />
+                ${busyIndicatorHtml}
               </div>
             </div>
-            <span style="${titleStyle}" class="font-medium text-neutral-300 truncate w-full text-center px-0.5 ${textMarginClass} tracking-wide drop-shadow-sm opacity-90 group-hover:opacity-100 transition-opacity">
+            <span style="${titleStyle}" class="font-medium text-neutral-300 truncate w-full text-center px-0.5 ${textMarginClass} tracking-wide drop-shadow-sm ${item.isLoading ? 'animate-pulse text-blue-300' : 'opacity-90 group-hover:opacity-100'} transition-all">
               ${item.title}
             </span>
           </div>
@@ -1340,12 +1422,14 @@ export default function App() {
     
     const resolvedIcon = app.iconUrl || getFaviconUrl(app.url);
     const resolvedTitle = app.title || getDomainBrand(app.url) || 'App';
+    const needsScrape = !!(app.url && app.url.startsWith('http'));
     const newItem: ShortcutItem = {
       id: Math.random().toString(36).substring(2, 9),
       type: 'app',
       title: resolvedTitle,
       url: app.url,
       iconUrl: resolvedIcon,
+      isLoading: needsScrape,
       w: 1,
       h: 8,
     };
@@ -1360,7 +1444,8 @@ export default function App() {
     setSearchQuery('');
     
     // Background metadata check to enhance shortcut with high-res SVG or official brand logo from actual domain
-    if (app.url && app.url.startsWith('http')) {
+    if (needsScrape) {
+      setTimeout(() => updateShortcutDynamically(newItem.id, { isLoading: false }), 20000);
       fetch('/api/scrape-metadata', {
         method: 'POST',
         credentials: 'include',
@@ -1374,12 +1459,20 @@ export default function App() {
           if (bestIcon && bestIcon !== '/default-globe.svg' && !isMonochromeOrBlackIcon(bestIcon)) {
             updateShortcutDynamically(newItem.id, {
               iconUrl: bestIcon,
+              isLoading: false,
               ...((!app.title || app.title.toLowerCase().includes('ibs')) && data.title ? { title: data.title } : {})
             });
+            return;
           }
         }
+        updateShortcutDynamically(newItem.id, { isLoading: false });
       })
-      .catch(() => {});
+      .catch(() => {
+        updateShortcutDynamically(newItem.id, { isLoading: false });
+      })
+      .finally(() => {
+        updateShortcutDynamically(newItem.id, { isLoading: false });
+      });
     }
 
     setTimeout(() => {
@@ -1444,6 +1537,7 @@ export default function App() {
           title: getDomainBrand(formattedUrl) || fallbackDomain,
           url: formattedUrl,
           iconUrl: initialIcon,
+          isLoading: true,
           w: 1, h: 8
         };
 
@@ -1456,6 +1550,7 @@ export default function App() {
         addWidgetToGrid(newItem);
 
         // Fetch metadata in the background
+        setTimeout(() => updateShortcutDynamically(newId, { isLoading: false }), 20000);
         const brandQuery = getDomainBrand(formattedUrl) || '';
         fetch('/api/scrape-metadata', {
           method: 'POST',
@@ -1470,10 +1565,17 @@ export default function App() {
           
           updateShortcutDynamically(newId, {
              title: updatedTitle,
-             iconUrl: chosenIcon
+             iconUrl: chosenIcon,
+             isLoading: false
           });
         })
-        .catch(err => console.error("Failed to add custom shortcut", err));
+        .catch(err => {
+          console.error("Failed to add custom shortcut", err);
+          updateShortcutDynamically(newId, { isLoading: false });
+        })
+        .finally(() => {
+          updateShortcutDynamically(newId, { isLoading: false });
+        });
       }
     } else if (e.key === 'Escape') {
       setIsInputFocused(false);
@@ -1650,6 +1752,7 @@ export default function App() {
                           title: getDomainBrand(formattedUrl) || fallbackDomain,
                           url: formattedUrl,
                           iconUrl: initialIcon,
+                          isLoading: true,
                           w: 1, h: 8
                         };
 
@@ -1662,6 +1765,7 @@ export default function App() {
                         addWidgetToGrid(newItem);
 
                         // Fetch metadata in the background
+                        setTimeout(() => updateShortcutDynamically(newId, { isLoading: false }), 20000);
                         const brandQuery = getDomainBrand(formattedUrl) || '';
                         fetch('/api/scrape-metadata', {
                           method: 'POST',
@@ -1676,10 +1780,17 @@ export default function App() {
                           
                           updateShortcutDynamically(newId, {
                              title: updatedTitle,
-                             iconUrl: chosenIcon
+                             iconUrl: chosenIcon,
+                             isLoading: false
                           });
                         })
-                        .catch(err => console.error("Failed to add custom shortcut", err));
+                        .catch(err => {
+                          console.error("Failed to add custom shortcut", err);
+                          updateShortcutDynamically(newId, { isLoading: false });
+                        })
+                        .finally(() => {
+                          updateShortcutDynamically(newId, { isLoading: false });
+                        });
                       } else if (filteredApps.length > 0) {
                         handleAddShortcut(filteredApps[highlightedIndex]);
                       }
