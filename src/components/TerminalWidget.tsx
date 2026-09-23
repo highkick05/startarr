@@ -74,7 +74,7 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
   // Menus and dialogs
   const [showAppearanceMenu, setShowAppearanceMenu] = useState(false);
   const [showProfilesModal, setShowProfilesModal] = useState(false);
-  const [showConnectDialog, setShowConnectDialog] = useState(true);
+  const [showConnectDialog, setShowConnectDialog] = useState(false);
 
   // Saved SSH profiles
   const [profiles, setProfiles] = useState<SshProfile[]>([]);
@@ -487,6 +487,25 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
 
   const activeTab = tabs.find(t => t.id === activeTabId);
 
+  // Sync form with active tab whenever connect dialog opens or activeTabId changes
+  useEffect(() => {
+    if (activeTab && showConnectDialog) {
+      setFormHost(activeTab.host || '');
+      setFormPort(activeTab.port || 22);
+      setFormUser(activeTab.username || '');
+      setFormPassword(activeTab.password || '');
+      if (activeTab.privateKey) {
+        setFormPrivateKey(activeTab.privateKey);
+        setFormAuthType('privateKey');
+      } else {
+        setFormPrivateKey('');
+        setFormAuthType('password');
+      }
+      setFormPassphrase(activeTab.passphrase || '');
+      setFormName(activeTab.title !== 'New Session' ? activeTab.title : '');
+    }
+  }, [activeTabId, showConnectDialog]);
+
   // Background styling computation
   const backgroundStyle = isTransparent
     ? {
@@ -523,9 +542,6 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
                   key={tab.id}
                   onClick={() => {
                     setActiveTabId(tab.id);
-                    if (tab.status === 'disconnected') {
-                      setShowConnectDialog(true);
-                    }
                   }}
                   className={`no-drag group relative flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150 max-w-[140px] truncate ${
                     isActive
@@ -573,6 +589,17 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
         {/* Right: Controls & Options */}
         <div className="no-drag flex items-center space-x-1 shrink-0">
           
+          {/* Connection Settings Dialog Trigger */}
+          <button
+            onClick={() => setShowConnectDialog(true)}
+            className={`p-1 rounded-lg transition-colors ${
+              showConnectDialog ? 'bg-neutral-800 text-blue-400' : 'text-neutral-400 hover:text-blue-400 hover:bg-neutral-800/50'
+            }`}
+            title="Connection Settings"
+          >
+            <Lock size={13} />
+          </button>
+
           {/* Quick Connect / Profiles Dialog Trigger */}
           <button
             onClick={() => setShowProfilesModal(true)}
@@ -743,200 +770,286 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
           />
         ))}
 
-        {/* Quick Connect / New Session Overlay when tab is disconnected */}
-        {activeTab && activeTab.status === 'disconnected' && showConnectDialog && (
-          <div className="absolute inset-0 bg-neutral-950/80 backdrop-blur-md flex items-center justify-center p-4 z-20 overflow-y-auto no-scrollbar">
-            <div className="w-full max-w-sm bg-neutral-900/90 border border-neutral-800 rounded-2xl p-5 shadow-2xl space-y-4 my-auto">
-              
-              <div className="flex items-center justify-between pb-2 border-b border-neutral-800">
-                <div className="flex items-center space-x-2">
-                  <div className="w-7 h-7 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-                    <TerminalIcon size={16} />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-semibold text-neutral-100">SSH Connect</h4>
-                    <p className="text-[10px] text-neutral-400">Connect to remote Linux / Unix host</p>
-                  </div>
-                </div>
+        {/* Disconnected state placeholder */}
+        {activeTab && activeTab.status === 'disconnected' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2.5 select-none bg-neutral-950/40">
+            <div className="w-7 h-7 rounded-lg bg-neutral-800/80 border border-neutral-700/60 flex items-center justify-center text-neutral-400 mb-1 shadow-sm">
+              <TerminalIcon size={14} />
+            </div>
+            <p className="text-xs font-medium text-neutral-200">Terminal Disconnected</p>
+            <p className="text-[10px] text-neutral-400 mb-2 truncate max-w-[200px]">
+              {activeTab.host ? `${activeTab.username}@${activeTab.host}` : 'Configure SSH credentials to connect'}
+            </p>
+            <button
+              onClick={() => setShowConnectDialog(true)}
+              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg text-[11px] shadow-md shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-1"
+            >
+              <Lock size={10} />
+              <span>Connection Settings</span>
+            </button>
+          </div>
+        )}
 
-                {profiles.length > 0 && (
-                  <button
-                    onClick={() => setShowProfilesModal(true)}
-                    className="text-[11px] text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1"
-                  >
-                    <span>Saved ({profiles.length})</span>
-                  </button>
-                )}
+        {/* Failed state placeholder */}
+        {activeTab && activeTab.status === 'error' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2.5 select-none bg-neutral-950/70">
+            <div className="w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 mb-1 shadow-sm">
+              <X size={14} />
+            </div>
+            <p className="text-xs font-semibold text-rose-300">Connection Failed</p>
+            <p className="text-[10px] text-neutral-400 mb-2 px-3 line-clamp-2 max-w-[240px]">
+              {activeTab.errorMessage || 'Unable to establish SSH tunnel'}
+            </p>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => {
+                  if (activeTab.host) {
+                    connectTab(activeTab.id, {
+                      host: activeTab.host,
+                      port: activeTab.port || 22,
+                      username: activeTab.username,
+                      password: activeTab.password,
+                      privateKey: activeTab.privateKey,
+                      passphrase: activeTab.passphrase
+                    });
+                  } else {
+                    setShowConnectDialog(true);
+                  }
+                }}
+                className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-medium rounded text-[11px] transition-colors flex items-center gap-1"
+              >
+                <RefreshCw size={10} />
+                <span>Retry</span>
+              </button>
+              <button
+                onClick={() => setShowConnectDialog(true)}
+                className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded text-[11px] shadow-sm transition-all active:scale-95 flex items-center gap-1"
+              >
+                <Sliders size={10} />
+                <span>Settings</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Connecting state spinner */}
+        {activeTab && activeTab.status === 'connecting' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2.5 select-none bg-neutral-950/60 z-10">
+            <RefreshCw size={16} className="animate-spin text-blue-400 mb-1.5" />
+            <p className="text-xs font-medium text-neutral-200">Connecting to {activeTab.host || 'host'}...</p>
+            <p className="text-[10px] text-neutral-400 mt-0.5">Authenticating session</p>
+          </div>
+        )}
+      </div>
+
+      {/* Connection Settings Popup Modal (Compact & Minimal Padding) */}
+      {showConnectDialog && (
+        <div 
+          className="fixed inset-0 z-[1000001] bg-black/65 backdrop-blur-xs flex items-center justify-center p-3 animate-in fade-in duration-100"
+          onClick={() => setShowConnectDialog(false)}
+        >
+          <div 
+            className="w-full max-w-[325px] bg-neutral-900 border border-neutral-800 rounded-xl p-3 shadow-2xl space-y-2 text-neutral-200 animate-in zoom-in-95 duration-100 my-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-1.5 border-b border-neutral-800/80">
+              <div className="flex items-center space-x-1.5">
+                <div className="w-5 h-5 rounded-md bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                  <TerminalIcon size={12} />
+                </div>
+                <h4 className="text-xs font-semibold text-neutral-100">SSH Connection Settings</h4>
               </div>
 
-              {/* Quick Pick Profiles if any */}
-              {profiles.length > 0 && (
+              <div className="flex items-center space-x-1">
+                {profiles.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowConnectDialog(false);
+                      setShowProfilesModal(true);
+                    }}
+                    className="text-[10px] text-blue-400 hover:text-blue-300 font-medium px-1.5 py-0.5 rounded hover:bg-neutral-800 transition-colors"
+                    title="Manage Profiles"
+                  >
+                    Saved ({profiles.length})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowConnectDialog(false)}
+                  className="text-neutral-500 hover:text-neutral-300 p-0.5 rounded transition-colors"
+                  title="Close"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Saved Connection bar */}
+            {profiles.length > 0 && (
+              <div className="space-y-1">
+                <span className="text-[9px] font-semibold text-neutral-500 uppercase tracking-wider">Quick Saved Connection</span>
+                <div className="flex gap-1 overflow-x-auto no-scrollbar py-0.5">
+                  {profiles.map(p => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => handleSelectProfile(p)}
+                      className="flex items-center space-x-1 px-1.5 py-0.5 rounded-md bg-neutral-800/60 hover:bg-neutral-800 border border-neutral-700/50 text-left transition-colors shrink-0 max-w-[130px]"
+                      title={`${p.name} (${p.username}@${p.host}:${p.port})`}
+                    >
+                      <Server size={10} className="text-blue-400 shrink-0" />
+                      <span className="text-[10px] font-medium text-neutral-200 truncate">{p.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Compact Connect Form */}
+            <form onSubmit={handleConnectSubmit} className="space-y-2">
+              <div className="grid grid-cols-4 gap-1.5">
+                <div className="col-span-3 space-y-0.5">
+                  <label className="text-[10px] font-medium text-neutral-400">Host / IP</label>
+                  <input
+                    type="text"
+                    placeholder="192.168.1.50 or vps.net"
+                    value={formHost}
+                    onChange={e => setFormHost(e.target.value)}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-md px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-blue-500"
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div className="col-span-1 space-y-0.5">
+                  <label className="text-[10px] font-medium text-neutral-400">Port</label>
+                  <input
+                    type="number"
+                    value={formPort}
+                    onChange={e => setFormPort(Number(e.target.value))}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-md px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-blue-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-0.5">
+                <label className="text-[10px] font-medium text-neutral-400">Username</label>
+                <input
+                  type="text"
+                  placeholder="root, ubuntu, or user"
+                  value={formUser}
+                  onChange={e => setFormUser(e.target.value)}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-md px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              {/* Auth Mode Toggle */}
+              <div className="flex rounded-md bg-neutral-950 p-0.5 border border-neutral-800">
+                <button
+                  type="button"
+                  onClick={() => setFormAuthType('password')}
+                  className={`flex-1 py-0.5 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition-colors ${
+                    formAuthType === 'password' ? 'bg-neutral-800 text-neutral-100 shadow-sm' : 'text-neutral-400 hover:text-neutral-200'
+                  }`}
+                >
+                  <Lock size={10} />
+                  <span>Password</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormAuthType('privateKey')}
+                  className={`flex-1 py-0.5 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition-colors ${
+                    formAuthType === 'privateKey' ? 'bg-neutral-800 text-neutral-100 shadow-sm' : 'text-neutral-400 hover:text-neutral-200'
+                  }`}
+                >
+                  <Key size={10} />
+                  <span>Private Key</span>
+                </button>
+              </div>
+
+              {formAuthType === 'password' ? (
+                <div className="space-y-0.5">
+                  <label className="text-[10px] font-medium text-neutral-400">Password</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    value={formPassword}
+                    onChange={e => setFormPassword(e.target.value)}
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded-md px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              ) : (
                 <div className="space-y-1.5">
-                  <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Quick Saved Connection</span>
-                  <div className="grid grid-cols-2 gap-1.5 max-h-24 overflow-y-auto no-scrollbar">
-                    {profiles.map(p => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => handleSelectProfile(p)}
-                        className="flex items-center space-x-2 p-2 rounded-xl bg-neutral-800/40 hover:bg-neutral-800 border border-neutral-700/50 text-left transition-colors"
-                      >
-                        <Server size={13} className="text-blue-400 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-neutral-200 truncate">{p.name}</p>
-                          <p className="text-[10px] text-neutral-400 truncate">{p.username}@{p.host}</p>
-                        </div>
-                      </button>
-                    ))}
+                  <div className="space-y-0.5">
+                    <label className="text-[10px] font-medium text-neutral-400">Private Key (OpenSSH / PEM)</label>
+                    <textarea
+                      rows={2}
+                      placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."
+                      value={formPrivateKey}
+                      onChange={e => setFormPrivateKey(e.target.value)}
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-md px-2 py-1 text-[11px] font-mono text-neutral-300 focus:outline-none focus:border-blue-500 resize-none"
+                    />
+                  </div>
+                  <div className="space-y-0.5">
+                    <label className="text-[10px] font-medium text-neutral-400">Passphrase (optional)</label>
+                    <input
+                      type="password"
+                      placeholder="Optional"
+                      value={formPassphrase}
+                      onChange={e => setFormPassphrase(e.target.value)}
+                      className="w-full bg-neutral-950 border border-neutral-800 rounded-md px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-blue-500"
+                    />
                   </div>
                 </div>
               )}
 
-              {/* Connect Form */}
-              <form onSubmit={handleConnectSubmit} className="space-y-3">
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="col-span-2 space-y-1">
-                    <label className="text-[10px] font-medium text-neutral-400">Host / IP</label>
-                    <input
-                      type="text"
-                      placeholder="192.168.1.50 or vps.net"
-                      value={formHost}
-                      onChange={e => setFormHost(e.target.value)}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-blue-500"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-medium text-neutral-400">Port</label>
-                    <input
-                      type="number"
-                      value={formPort}
-                      onChange={e => setFormPort(Number(e.target.value))}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-medium text-neutral-400">Username</label>
-                  <input
-                    type="text"
-                    placeholder="root, ubuntu, or user"
-                    value={formUser}
-                    onChange={e => setFormUser(e.target.value)}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-blue-500"
-                    required
-                  />
-                </div>
-
-                {/* Auth Mode Toggle */}
-                <div className="flex rounded-lg bg-neutral-950 p-0.5 border border-neutral-800">
-                  <button
-                    type="button"
-                    onClick={() => setFormAuthType('password')}
-                    className={`flex-1 py-1 rounded-md text-[11px] font-medium flex items-center justify-center gap-1.5 transition-colors ${
-                      formAuthType === 'password' ? 'bg-neutral-800 text-neutral-100 shadow-sm' : 'text-neutral-400 hover:text-neutral-200'
-                    }`}
-                  >
-                    <Lock size={12} />
-                    Password
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormAuthType('privateKey')}
-                    className={`flex-1 py-1 rounded-md text-[11px] font-medium flex items-center justify-center gap-1.5 transition-colors ${
-                      formAuthType === 'privateKey' ? 'bg-neutral-800 text-neutral-100 shadow-sm' : 'text-neutral-400 hover:text-neutral-200'
-                    }`}
-                  >
-                    <Key size={12} />
-                    Private Key
-                  </button>
-                </div>
-
-                {formAuthType === 'password' ? (
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-medium text-neutral-400">Password</label>
-                    <input
-                      type="password"
-                      placeholder="••••••••"
-                      value={formPassword}
-                      onChange={e => setFormPassword(e.target.value)}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-medium text-neutral-400">Private Key (OpenSSH / PEM)</label>
-                      <textarea
-                        rows={3}
-                        placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."
-                        value={formPrivateKey}
-                        onChange={e => setFormPrivateKey(e.target.value)}
-                        className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-neutral-300 focus:outline-none focus:border-blue-500 resize-none"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-medium text-neutral-400">Passphrase (if key is encrypted)</label>
-                      <input
-                        type="password"
-                        placeholder="Optional"
-                        value={formPassphrase}
-                        onChange={e => setFormPassphrase(e.target.value)}
-                        className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Save connection checkbox */}
-                <div className="pt-1 flex items-center space-x-2">
+              {/* Save Profile Checkbox */}
+              <div className="pt-0.5">
+                <label className="flex items-center space-x-1.5 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     id={`save-prof-${activeTabId}`}
                     checked={formSaveProfile}
                     onChange={e => setFormSaveProfile(e.target.checked)}
-                    className="rounded bg-neutral-950 border-neutral-800 text-blue-600 focus:ring-0"
+                    className="rounded bg-neutral-950 border-neutral-800 text-blue-600 focus:ring-0 w-3 h-3"
                   />
-                  <label htmlFor={`save-prof-${activeTabId}`} className="text-xs text-neutral-300 select-none">
-                    Save connection profile
-                  </label>
-                </div>
+                  <span className="text-[10px] text-neutral-300">Save connection profile</span>
+                </label>
+              </div>
 
-                {formSaveProfile && (
-                  <div className="space-y-1">
-                    <input
-                      type="text"
-                      placeholder="Profile label (e.g. Home Server)"
-                      value={formName}
-                      onChange={e => setFormName(e.target.value)}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                )}
+              {formSaveProfile && (
+                <input
+                  type="text"
+                  placeholder="Profile label (e.g. Home Server)"
+                  value={formName}
+                  onChange={e => setFormName(e.target.value)}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-md px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-blue-500"
+                />
+              )}
 
-                <div className="flex gap-2 pt-2">
-                  <button
-                    type="submit"
-                    className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/30"
-                  >
-                    <span>Connect</span>
-                  </button>
-                  {activeTab.host && (
-                    <button
-                      type="button"
-                      onClick={() => setShowConnectDialog(false)}
-                      className="px-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 py-2 rounded-xl text-xs transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              </form>
-            </div>
+              {/* Submit Buttons */}
+              <div className="flex gap-1.5 pt-1">
+                <button
+                  type="submit"
+                  className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-medium py-1.5 rounded-lg text-xs transition-colors flex items-center justify-center gap-1 shadow-md shadow-blue-600/30 active:scale-98"
+                >
+                  <Check size={12} />
+                  <span>Connect</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowConnectDialog(false)}
+                  className="px-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 py-1.5 rounded-lg text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Saved SSH Profiles Modal */}
       {showProfilesModal && (
