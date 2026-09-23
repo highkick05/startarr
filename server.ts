@@ -76,13 +76,15 @@ async function getWikimediaLogos(term: string): Promise<string[]> {
   const results: string[] = [];
   const junkWords = [
     'commons', 'symbol', 'share', 'arrow', 'ambox', 'flag', 'question', 'edit', 
-    'disambig', 'portal', 'wikidata', 'wikimedia', 'stub', 'padlock', 'copyright', 
-    'free-software-license', 'license', 'fools', 'screenshot'
+    'disambig', 'portal', 'wikidata', 'wikimedia', 'wiktionary', 'wikipedia',
+    'wikiquote', 'wikisource', 'wikibooks', 'wikinews', 'wikiversity', 'wikivoyage',
+    'stub', 'padlock', 'copyright', 'free-software-license', 'license', 'fools', 'screenshot',
+    'script', 'alphabet', 'character', 'font', 'multilingual'
   ];
 
   for (const q of queries.slice(0, 2)) {
     try {
-      // 1. Check primary infobox pageimage for the topic
+      // Check primary infobox pageimage ONLY for the topic (never query arbitrary generator images from templates/footer links)
       const pageUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(q)}&prop=pageimages&pithumbsize=500&format=json`;
       const pageRes = await fetch(pageUrl, { 
         headers: { 'User-Agent': 'StartarrDashboard/1.0 (https://github.com/highkick05/startarr; contact@startarr.app)' }, 
@@ -101,39 +103,15 @@ async function getWikimediaLogos(term: string): Promise<string[]> {
           }
         }
       }
-
-      // 2. Query images inside the page (many software / brand logos are non-free fair-use File:*.png/svg)
-      const genUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(q)}&generator=images&gimlimit=15&prop=imageinfo&iiprop=url|size&format=json`;
-      const genRes = await fetch(genUrl, { 
-        headers: { 'User-Agent': 'StartarrDashboard/1.0 (https://github.com/highkick05/startarr; contact@startarr.app)' }, 
-        signal: AbortSignal.timeout(2500) 
-      });
-      if (genRes.ok) {
-        const genData: any = await genRes.json();
-        const genPages = genData.query?.pages || {};
-        for (const pid of Object.keys(genPages)) {
-          const page = genPages[pid];
-          const pageTitle = (page.title || '').toLowerCase();
-          const isJunk = junkWords.some(j => pageTitle.includes(j));
-          const isRelevant = pageTitle.includes('logo') || pageTitle.includes(q.toLowerCase()) || pageTitle.includes('icon');
-          if (isRelevant && !isJunk) {
-            for (const ii of page.imageinfo || []) {
-              if (ii.url && (ii.width >= 48 || ii.height >= 48 || ii.url.endsWith('.svg')) && !results.includes(ii.url)) {
-                results.push(ii.url);
-              }
-            }
-          }
-        }
-      }
     } catch {}
   }
   return results;
 }
 
 async function getVerifiedWalkxcode(title: string) {
-  if (!title || title.trim().length < 3) return [];
-  const words = title.split(/[\s\|]+/).filter(w => w.length >= 3);
-  words.unshift(title.trim()); // Try full string first
+  if (!title || !title.trim()) return [];
+  const rawWords = title.split(/[\s\|()]+/).filter(w => w.length >= 3 || w.toLowerCase() === 'x');
+  const words = [title.trim(), ...rawWords];
   
   // Build a list of potential sanitizations
   const candidates = new Set<string>();
@@ -141,8 +119,8 @@ async function getVerifiedWalkxcode(title: string) {
   for (const word of words) {
     const dashed = word.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     const squished = word.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (dashed && dashed.length >= 3) candidates.add(dashed);
-    if (squished && squished.length >= 3) candidates.add(squished);
+    if (dashed && (dashed.length >= 3 || dashed === 'x')) candidates.add(dashed);
+    if (squished && (squished.length >= 3 || squished === 'x')) candidates.add(squished);
   }
 
   // 1. Instant check against local dashboard-icons catalog
@@ -813,7 +791,10 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
   const titleWords = (finalTitle || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !['official', 'home', 'website', 'online', 'download', 'series', 'torrent', 'torrents'].includes(w));
   const strippedBrand = brandSlug.replace(/(x|to|app|tv|online|re|io|ws|is)$/, '');
 
+  const isXOrTwitter = actualDomain === 'x.com' || actualDomain === 'twitter.com' || baseUrl.hostname.includes('x.com') || baseUrl.hostname.includes('twitter.com') || searchSlug === 'x' || searchSlug === 'twitter';
+
   const candidateSlugs = [...new Set([
+    ...(isXOrTwitter ? ['x', 'twitter'] : []),
     cleanBrandSlug,
     strippedBrand, 
     brandSlug, 
@@ -821,7 +802,7 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
     titleSlug, 
     domainSlug, 
     ...titleWords
-  ].filter(s => s && s.length >= 3))];
+  ].filter(s => s && (s.length >= 3 || (s === 'x' && (dashIconsSet.has('x') || simpleIconsSet.has('x'))))))];
 
   for (const slug of candidateSlugs) {
     const validWalkx = await getVerifiedWalkxcode(slug);
@@ -862,7 +843,7 @@ app.post("/api/scrape-metadata", async (req: any, res) => {
   for (const wq of uniqueWikiQueries.slice(0, 3)) {
     const wikiLogos = await getWikimediaLogos(wq);
     if (wikiLogos.length > 0) {
-      hdIcons.unshift(...wikiLogos);
+      hdIcons.push(...wikiLogos);
     }
   }
 

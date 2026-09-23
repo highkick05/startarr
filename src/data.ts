@@ -1175,7 +1175,8 @@ export const popularApps: ShortcutItem[] = [
   },
   {
     "title": "X (Twitter)",
-    "url": "https://x.com"
+    "url": "https://x.com",
+    "iconUrl": "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/x.png"
   },
   {
     "title": "TikTok",

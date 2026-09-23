@@ -64,14 +64,24 @@ export const getFaviconUrl = (url: string) => {
   }
 };
 
+export const isJunkWikiIcon = (url?: string): boolean => {
+  if (!url) return false;
+  const l = url.toLowerCase();
+  return l.includes('wiktionary') || l.includes('wikipedia') || l.includes('wikiquote') ||
+         l.includes('wikisource') || l.includes('wikibooks') || l.includes('wikimedia') ||
+         l.includes('wikidata') || l.includes('commons') || l.includes('screenshot') ||
+         l.includes('fools') || l.includes('script') || l.includes('alphabet') ||
+         l.includes('character') || l.includes('font') || l.includes('multilingual');
+};
+
 export const getIconQualityScore = (ico: string): number => {
-  if (!ico) return 0;
+  if (!ico || isJunkWikiIcon(ico)) return 0;
   if (ico.includes('homarr-labs/dashboard-icons')) return 100;
   if (ico.includes('selfhst/icons')) return 95;
   if (ico.includes('walkxcode/dashboard-icons')) return 90;
   if (ico.includes('cdn.simpleicons.org') && !isMonochromeOrBlackIcon(ico)) return 85;
-  if ((ico.includes('wikimedia.org') || ico.includes('wikipedia.org')) && !ico.toLowerCase().includes('screenshot') && !ico.toLowerCase().includes('fools')) return 80;
-  if ((ico.includes('logo') || ico.includes('apple-touch-icon') || ico.includes('brand')) && !ico.toLowerCase().endsWith('.ico')) return 75;
+  if ((ico.includes('logo') || ico.includes('apple-touch-icon') || ico.includes('brand') || ico.includes('twimg.com')) && !ico.toLowerCase().endsWith('.ico')) return 80;
+  if ((ico.includes('wikimedia.org') || ico.includes('wikipedia.org')) && !isJunkWikiIcon(ico)) return 75;
   if (ico.includes('unavatar.io')) return 60;
   if (ico.includes('faviconkit.com')) return 55;
   if (ico.includes('icon.horse')) return 40;
@@ -85,8 +95,15 @@ export const pickBestColouredIcon = (icons: string[], url?: string): string => {
     return url ? getFaviconUrl(url) : '/default-globe.svg';
   }
 
-  const valid = icons.filter(i => i && i !== '/default-globe.svg' && !i.includes('default-globe.svg'));
+  const valid = icons.filter(i => i && i !== '/default-globe.svg' && !i.includes('default-globe.svg') && !isJunkWikiIcon(i));
   const coloured = valid.filter(i => !isMonochromeOrBlackIcon(i));
+
+  // Special check: If this is an X / Twitter shortcut, prefer the official X icon over older birds if available
+  const isX = url && (url.includes('x.com') || url.includes('/x.com'));
+  if (isX) {
+    const xIcon = coloured.find(i => i.includes('/x.') || i.endsWith('/x.svg') || i.endsWith('/x.png') || i.includes('simpleicons.org/x'));
+    if (xIcon) return xIcon;
+  }
 
   if (coloured.length > 0) {
     // 1. Homarr Dashboard Icons (vector SVG first, then PNG)
@@ -111,20 +128,19 @@ export const pickBestColouredIcon = (icons: string[], url?: string): string => {
     const simpleColoured = coloured.find(i => i.includes('cdn.simpleicons.org') && !isMonochromeOrBlackIcon(i));
     if (simpleColoured) return simpleColoured;
 
-    // 5. Official Wikipedia / Wikimedia Commons Brand Logo (e.g. EZTV, The Pirate Bay, 1337x)
-    const wikiLogo = coloured.find(i => 
-      (i.includes('wikimedia.org') || i.includes('wikipedia.org')) && 
-      !i.toLowerCase().includes('screenshot') &&
-      !i.toLowerCase().includes('fools')
-    );
-    if (wikiLogo) return wikiLogo;
-
-    // 6. High-res site logo or apple touch icon
+    // 5. High-res site logo or apple touch icon directly from site
     const siteLogo = coloured.find(i => 
-      (i.includes('logo') || i.includes('apple-touch-icon') || i.includes('brand')) && 
+      (i.includes('logo') || i.includes('apple-touch-icon') || i.includes('brand') || i.includes('twimg.com')) && 
       !i.toLowerCase().endsWith('.ico')
     );
     if (siteLogo) return siteLogo;
+
+    // 6. Official Wikipedia / Wikimedia Commons Brand Logo (e.g. EZTV, The Pirate Bay) - strictly verified
+    const wikiLogo = coloured.find(i => 
+      (i.includes('wikimedia.org') || i.includes('wikipedia.org')) && 
+      !isJunkWikiIcon(i)
+    );
+    if (wikiLogo) return wikiLogo;
 
     // 7. Unavatar high-resolution domain logo
     const unavatar = coloured.find(i => i.includes('unavatar.io'));
@@ -196,8 +212,8 @@ export default function App() {
             setShortcuts(parsed.filter((p: any) => !!p).map((p: any) => ({
               ...p,
               w: p?.type === 'app' ? 1 : p?.w,
-              // If an app shortcut was previously automatically assigned a black unstyled logo, heal it to authentic colored logo:
-              iconUrl: (p?.type === 'app' && isMonochromeOrBlackIcon(p?.iconUrl))
+              // If an app shortcut was previously automatically assigned a black unstyled logo or a junk wiki icon, heal it to authentic colored logo:
+              iconUrl: (p?.type === 'app' && (isMonochromeOrBlackIcon(p?.iconUrl) || isJunkWikiIcon(p?.iconUrl)))
                 ? (getFaviconUrl(p?.url) || p?.iconUrl)
                 : p?.iconUrl,
               // Multiply h by 8 if it's the old 1x format. 
@@ -207,13 +223,13 @@ export default function App() {
             })));
             // Also need to re-render grid since API loaded!
 
-            // Background upgrade: If any app shortcut is still using a low-quality gstatic favicon, globe, or generic icon,
-            // query scrape-metadata to heal it with verified high-res brand logos (Wikimedia, Homarr, Selfh.st, Walkxcode)
+            // Background upgrade: If any app shortcut is still using a low-quality gstatic favicon, globe, monochrome, or junk wiki icon,
+            // query scrape-metadata to heal it with verified high-res brand logos (Homarr, Selfh.st, Walkxcode, official brand vector)
             const lowQualityApps = parsed.filter((p: any) => 
               p?.type === 'app' && 
               p?.url && 
               p?.url.startsWith('http') &&
-              (!p.iconUrl || p.iconUrl.includes('gstatic.com/faviconV2') || p.iconUrl.includes('default-globe.svg') || isMonochromeOrBlackIcon(p.iconUrl))
+              (!p.iconUrl || p.iconUrl.includes('gstatic.com/faviconV2') || p.iconUrl.includes('default-globe.svg') || isMonochromeOrBlackIcon(p.iconUrl) || isJunkWikiIcon(p.iconUrl))
             );
             if (lowQualityApps.length > 0) {
               setTimeout(() => {
@@ -367,49 +383,26 @@ export default function App() {
             }
           }
 
-          // Handle busy loading indicator (thinking spinner)
+          // Handle busy loading indicator (clean, minimal corner spinner)
           if (updates.isLoading !== undefined) {
             const busyIndicator = imgWrapperEl.querySelector('.busy-indicator');
             const busyBadge = imgWrapperEl.querySelector('.busy-badge');
+            if (busyBadge) busyBadge.remove(); // Clean up any legacy badges
+
             if (updates.isLoading) {
               if (!busyIndicator) {
                 const indicatorDiv = document.createElement('div');
-                indicatorDiv.className = 'busy-indicator absolute inset-0 flex items-center justify-center rounded-xl bg-black/45 backdrop-blur-[1px] pointer-events-none transition-all duration-300 z-10';
+                indicatorDiv.className = 'busy-indicator absolute top-1 right-1 z-20 flex items-center justify-center w-4 h-4 rounded-full bg-neutral-900/90 border border-neutral-700/80 shadow-md pointer-events-none transition-all duration-200';
                 indicatorDiv.innerHTML = `
-                  <div class="relative flex items-center justify-center">
-                    <svg class="animate-spin w-5 h-5 text-blue-400 drop-shadow-[0_0_8px_rgba(59,130,246,0.8)]" viewBox="0 0 24 24" fill="none">
-                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
-                      <path class="opacity-95" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <div class="absolute w-1.5 h-1.5 rounded-full bg-blue-300 animate-ping"></div>
-                  </div>
+                  <svg class="animate-spin w-2.5 h-2.5 text-blue-400" viewBox="0 0 24 24" fill="none">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                  </svg>
                 `;
                 imgWrapperEl.appendChild(indicatorDiv);
               }
-              if (!busyBadge) {
-                const badgeDiv = document.createElement('div');
-                badgeDiv.className = 'busy-badge absolute -top-1 -right-1 z-20 flex items-center justify-center w-4 h-4 rounded-full bg-blue-500 shadow-md shadow-blue-500/60 ring-2 ring-neutral-900 pointer-events-none';
-                badgeDiv.innerHTML = `
-                  <span class="relative flex h-2 w-2">
-                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-300 opacity-75"></span>
-                    <span class="relative inline-flex rounded-full h-2 w-2 bg-sky-100"></span>
-                  </span>
-                `;
-                imgWrapperEl.appendChild(badgeDiv);
-              }
-              imgEl.classList.add('opacity-50');
-              if (titleEl) {
-                titleEl.classList.add('animate-pulse', 'text-blue-300');
-                titleEl.classList.remove('opacity-90');
-              }
             } else {
               if (busyIndicator) busyIndicator.remove();
-              if (busyBadge) busyBadge.remove();
-              imgEl.classList.remove('opacity-50');
-              if (titleEl) {
-                titleEl.classList.remove('animate-pulse', 'text-blue-300');
-                titleEl.classList.add('opacity-90');
-              }
             }
           }
        }
@@ -1253,20 +1246,11 @@ export default function App() {
       const onerrorAttr = `onerror="this.onerror=null; this.src='${defaultIcon}';"`;
 
       const busyIndicatorHtml = item.isLoading ? `
-        <div class="busy-indicator absolute inset-0 flex items-center justify-center rounded-xl bg-black/45 backdrop-blur-[1px] pointer-events-none transition-all duration-300 z-10">
-          <div class="relative flex items-center justify-center">
-            <svg class="animate-spin w-5 h-5 text-blue-400 drop-shadow-[0_0_8px_rgba(59,130,246,0.8)]" viewBox="0 0 24 24" fill="none">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
-              <path class="opacity-95" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <div class="absolute w-1.5 h-1.5 rounded-full bg-blue-300 animate-ping"></div>
-          </div>
-        </div>
-        <div class="busy-badge absolute -top-1 -right-1 z-20 flex items-center justify-center w-4 h-4 rounded-full bg-blue-500 shadow-md shadow-blue-500/60 ring-2 ring-neutral-900 pointer-events-none">
-          <span class="relative flex h-2 w-2">
-            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-300 opacity-75"></span>
-            <span class="relative inline-flex rounded-full h-2 w-2 bg-sky-100"></span>
-          </span>
+        <div class="busy-indicator absolute top-1 right-1 z-20 flex items-center justify-center w-4 h-4 rounded-full bg-neutral-900/90 border border-neutral-700/80 shadow-md pointer-events-none transition-all duration-200">
+          <svg class="animate-spin w-2.5 h-2.5 text-blue-400" viewBox="0 0 24 24" fill="none">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
         </div>
       ` : '';
 
@@ -1277,11 +1261,11 @@ export default function App() {
           <div class="pointer-events-none w-full h-full flex flex-col items-center justify-between ${paddingClass}">
             <div class="flex-1 w-full min-h-0 flex items-center justify-center ${iconWrapperClass}">
               <div style="height: 100%; aspect-ratio: 1/1; ${item.iconBackground === 'white' ? 'background-color: white;' : item.iconBackground === 'black' ? 'background-color: black;' : ''}" class="relative flex items-center justify-center rounded-xl ${(item.iconBackground === 'white' || item.iconBackground === 'black') ? 'p-2' : ''} shadow-sm drop-shadow-md hover:drop-shadow-xl transition-all duration-300">
-                <img src="${iconUrl}" ${onloadAttr} ${onerrorAttr} alt="${item.title}" draggable="false" style="width: 100%; height: 100%; object-fit: contain; ${item.invertIcon ? 'filter: invert(1);' : ''}" class="rounded-lg ${item.isLoading ? 'opacity-50' : ''}" />
+                <img src="${iconUrl}" ${onloadAttr} ${onerrorAttr} alt="${item.title}" draggable="false" style="width: 100%; height: 100%; object-fit: contain; ${item.invertIcon ? 'filter: invert(1);' : ''}" class="rounded-lg" />
                 ${busyIndicatorHtml}
               </div>
             </div>
-            <span style="${titleStyle}" class="font-medium text-neutral-300 truncate w-full text-center px-0.5 ${textMarginClass} tracking-wide drop-shadow-sm ${item.isLoading ? 'animate-pulse text-blue-300' : 'opacity-90 group-hover:opacity-100'} transition-all">
+            <span style="${titleStyle}" class="font-medium text-neutral-300 truncate w-full text-center px-0.5 ${textMarginClass} tracking-wide drop-shadow-sm opacity-90 group-hover:opacity-100 transition-opacity">
               ${item.title}
             </span>
           </div>
