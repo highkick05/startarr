@@ -1,6 +1,7 @@
 export interface ShortcutItem {
   id: string;
-  type?: 'app' | 'category' | 'container';
+  type?: 'app' | 'category' | 'container' | 'widget';
+  widgetType?: 'terminal' | string;
   title: string;
   url: string;
   iconUrl?: string;
@@ -13,6 +14,19 @@ export interface ShortcutItem {
   w?: number;
   h?: number;
   children?: ShortcutItem[];
+  widgetConfig?: Record<string, any>;
+}
+
+export interface SshProfile {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+  authType: 'password' | 'privateKey';
+  privateKey?: string;
+  passphrase?: string;
+  createdAt?: number;
 }
 
 declare global {

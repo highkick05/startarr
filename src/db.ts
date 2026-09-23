@@ -47,6 +47,20 @@ export async function getDb() {
       created_at INTEGER,
       FOREIGN KEY(user_id) REFERENCES users(id)
     );
+
+    CREATE TABLE IF NOT EXISTS ssh_profiles (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      host TEXT NOT NULL,
+      port INTEGER DEFAULT 22,
+      username TEXT NOT NULL,
+      auth_type TEXT DEFAULT 'password',
+      private_key TEXT,
+      passphrase TEXT,
+      created_at INTEGER,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    );
   `);
 
   try {

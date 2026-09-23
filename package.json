@@ -14,7 +14,11 @@
   "dependencies": {
     "@libsql/client": "^0.18.0",
     "@tailwindcss/vite": "^4.1.14",
+    "@types/ssh2": "^1.15.6",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.0.4",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.2.3",
@@ -29,8 +33,10 @@
     "react-dom": "^19.0.1",
     "sqlite": "^5.1.1",
     "sqlite3": "^6.0.1",
+    "ssh2": "^1.17.0",
     "uuid": "^14.0.2",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",

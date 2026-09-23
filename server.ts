@@ -1,9 +1,12 @@
 import express from "express";
+import http from "http";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
 import { createServer as createViteServer } from "vite";
+import { WebSocketServer, WebSocket } from "ws";
+import { Client as SshClient } from "ssh2";
 import { getDb } from "./src/db.ts";
 import { getActualDomain, getDomainBrand } from "./src/utils/domain.ts";
 import bcrypt from "bcryptjs";
@@ -976,6 +979,198 @@ app.delete("/api/backgrounds/:id", requireAuth, async (req: any, res) => {
   }
 });
 
+// SSH Profiles API
+app.get("/api/ssh/profiles", requireAuth, async (req: any, res) => {
+  try {
+    const db = await getDb();
+    const rows = await db.all("SELECT id, name, host, port, username, auth_type as authType, private_key as privateKey, passphrase, created_at as createdAt FROM ssh_profiles WHERE user_id = ? ORDER BY created_at DESC", [req.userId]);
+    res.json(rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/ssh/profiles", requireAuth, async (req: any, res) => {
+  try {
+    const { name, host, port = 22, username, authType = 'password', privateKey = '', passphrase = '' } = req.body;
+    if (!name || !host || !username) {
+      return res.status(400).json({ error: "Name, Host, and Username are required." });
+    }
+    const id = uuidv4();
+    const db = await getDb();
+    const createdAt = Date.now();
+    await db.run(
+      "INSERT INTO ssh_profiles (id, user_id, name, host, port, username, auth_type, private_key, passphrase, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [id, req.userId, name, host, Number(port) || 22, username, authType, privateKey, passphrase, createdAt]
+    );
+    res.json({ id, name, host, port: Number(port) || 22, username, authType, privateKey, passphrase, createdAt });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/ssh/profiles/:id", requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    const { name, host, port = 22, username, authType = 'password', privateKey = '', passphrase = '' } = req.body;
+    const db = await getDb();
+    await db.run(
+      "UPDATE ssh_profiles SET name = ?, host = ?, port = ?, username = ?, auth_type = ?, private_key = ?, passphrase = ? WHERE id = ? AND user_id = ?",
+      [name, host, Number(port) || 22, username, authType, privateKey, passphrase, id, req.userId]
+    );
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/ssh/profiles/:id", requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    const db = await getDb();
+    await db.run("DELETE FROM ssh_profiles WHERE id = ? AND user_id = ?", [id, req.userId]);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// SSH Terminal WebSocket Server
+const httpServer = http.createServer(app);
+const wss = new WebSocketServer({ noServer: true });
+
+wss.on("connection", (ws: WebSocket, req: any) => {
+  let sshClient: SshClient | null = null;
+  let sshStream: any = null;
+
+  const send = (obj: any) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(obj));
+    }
+  };
+
+  ws.on("message", async (msgStr: string) => {
+    try {
+      const msg = JSON.parse(msgStr.toString());
+      if (msg.action === "connect") {
+        const { host, port = 22, username, password, privateKey, passphrase, term = "xterm-256color", cols = 80, rows = 24 } = msg;
+
+        if (!host || !username) {
+          send({ type: "error", message: "Host and Username are required to connect." });
+          return;
+        }
+
+        if (sshClient) {
+          try { sshClient.end(); } catch (e) {}
+          sshClient = null;
+          sshStream = null;
+        }
+
+        send({ type: "status", status: "connecting", message: `Connecting to ${username}@${host}:${port}...` });
+
+        sshClient = new SshClient();
+
+        sshClient.on("ready", () => {
+          send({ type: "status", status: "connected", message: `Connected to ${username}@${host}:${port}` });
+          
+          sshClient!.shell({ term, cols: Number(cols) || 80, rows: Number(rows) || 24 }, (err, stream) => {
+            if (err) {
+              send({ type: "error", message: "Shell initialization failed: " + err.message });
+              return;
+            }
+
+            sshStream = stream;
+
+            stream.on("data", (chunk: Buffer) => {
+              send({ type: "data", data: chunk.toString("utf-8") });
+            });
+
+            stream.stderr.on("data", (chunk: Buffer) => {
+              send({ type: "data", data: chunk.toString("utf-8") });
+            });
+
+            stream.on("close", () => {
+              send({ type: "status", status: "closed", message: "\r\n[Session closed by remote host]\r\n" });
+              try { sshClient?.end(); } catch (e) {}
+              sshClient = null;
+              sshStream = null;
+            });
+          });
+        });
+
+        sshClient.on("error", (err: any) => {
+          send({ type: "error", message: "SSH Error: " + (err.message || err.toString()) });
+        });
+
+        sshClient.on("close", () => {
+          send({ type: "status", status: "closed", message: "\r\n[Connection closed]\r\n" });
+        });
+
+        const connectConfig: any = {
+          host,
+          port: Number(port) || 22,
+          username,
+          readyTimeout: 20000,
+          keepaliveInterval: 10000,
+          keepaliveCountMax: 3
+        };
+
+        if (privateKey && String(privateKey).trim()) {
+          connectConfig.privateKey = String(privateKey).trim();
+          if (passphrase) connectConfig.passphrase = passphrase;
+        } else if (password) {
+          connectConfig.password = password;
+        }
+
+        try {
+          sshClient.connect(connectConfig);
+        } catch (err: any) {
+          send({ type: "error", message: "Connection initiation error: " + err.message });
+        }
+
+      } else if (msg.action === "data") {
+        if (sshStream) {
+          sshStream.write(msg.data);
+        }
+      } else if (msg.action === "resize") {
+        if (sshStream) {
+          sshStream.setWindow(Number(msg.rows) || 24, Number(msg.cols) || 80, 0, 0);
+        }
+      } else if (msg.action === "disconnect") {
+        if (sshClient) {
+          try { sshClient.end(); } catch (e) {}
+          sshClient = null;
+          sshStream = null;
+        }
+        send({ type: "status", status: "disconnected", message: "\r\n[Disconnected by user]\r\n" });
+      }
+    } catch (err: any) {
+      console.error("WS error:", err);
+    }
+  });
+
+  ws.on("close", () => {
+    if (sshClient) {
+      try { sshClient.end(); } catch (e) {}
+      sshClient = null;
+      sshStream = null;
+    }
+  });
+});
+
+httpServer.on("upgrade", (request, socket, head) => {
+  try {
+    const url = new URL(request.url || "", `http://${request.headers.host}`);
+    if (url.pathname === "/api/terminal/ws") {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit("connection", ws, request);
+      });
+    }
+  } catch (e) {
+    socket.destroy();
+  }
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -991,7 +1186,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);
   });
 }

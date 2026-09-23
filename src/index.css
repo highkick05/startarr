@@ -92,3 +92,24 @@
 .terminal-cursor-blink {
   animation: terminal-cursor-blink 1s infinite;
 }
+
+/* Terminal Widget & Transparency Styling */
+.terminal-mount-point {
+  overflow: hidden !important;
+  width: 100%;
+  height: 100%;
+}
+
+.terminal-mount-point .xterm {
+  height: 100%;
+  width: 100%;
+}
+
+.terminal-mount-point .xterm-viewport {
+  background-color: transparent !important;
+}
+
+.terminal-mount-point .xterm-screen {
+  background-color: transparent !important;
+}
+

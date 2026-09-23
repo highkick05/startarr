@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { GridStack } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
-import { Plus, X, Link2, Loader2, LayoutGrid, Search, Globe, Settings, Trash2, Image as ImageIcon, Video as VideoIcon, Upload, Trash, LogOut, User, ArrowRight, Sparkles, Check, RefreshCw } from 'lucide-react';
+import { Plus, X, Link2, Loader2, LayoutGrid, Search, Globe, Settings, Trash2, Image as ImageIcon, Video as VideoIcon, Upload, Trash, LogOut, User, ArrowRight, Sparkles, Check, RefreshCw, Terminal as TerminalIcon, Sliders } from 'lucide-react';
 import { ShortcutItem } from './types';
 import { AuthContext } from './Auth.tsx';
 import { popularApps } from './data';
 import { StartarrLogo } from './components/StartarrLogo';
 import { getActualDomain, getDomainBrand } from './utils/domain';
+import { TerminalWidget } from './components/TerminalWidget';
 
 type LayoutSize = 'small' | 'medium' | 'large';
 
@@ -219,7 +221,7 @@ export default function App() {
               // Multiply h by 8 if it's the old 1x format. 
               // We assume old apps have h:1. Old containers have h:2 or 3.
               // New apps will have h:8.
-              h: (p.type === 'app' && p.h < 8) ? 8 : (p.type === 'category' && p.h < 4 ? 4 : (p.type === 'container' && p.h < 8 ? p.h * 8 : p.h))
+              h: (p.type === 'app' && p.h < 8) ? 8 : (p.type === 'category' && p.h < 4 ? 4 : (p.type === 'container' && p.h < 8 ? p.h * 8 : ((p.type === 'widget' || p.widgetType === 'terminal') && (!p.h || p.h < 12) ? 24 : p.h)))
             })));
             // Also need to re-render grid since API loaded!
 
@@ -500,9 +502,15 @@ export default function App() {
   const gridKey = useRef(0); // Used to force-remount grid when layout size changes
   const handleRemovedEventRef = useRef<(e: any, items: any[]) => void>();
 
+  const autoArrangeDashboardRef = useRef<() => void>();
+
   const [showRecycleBin, setShowRecycleBin] = useState(false);
   const [recycleBin, setRecycleBin] = useState<ShortcutItem[]>([]);
   const [isRecycleBinModalOpen, setIsRecycleBinModalOpen] = useState(false);
+
+  // Terminal Widgets mounted into GridStack nodes via React Portals
+  const [terminalMounts, setTerminalMounts] = useState<Map<string, { el: HTMLElement; item: ShortcutItem }>>(new Map());
+  const terminalMountsRef = useRef<Map<string, { el: HTMLElement; item: ShortcutItem }>>(new Map());
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{title: string, url: string}[]>([]);
@@ -838,6 +846,9 @@ export default function App() {
           if (el.parentNode) {
             el.parentNode.removeChild(el);
           }
+
+          terminalMountsRef.current.delete(id);
+          setTerminalMounts(new Map(terminalMountsRef.current));
           
           // Force update React state
           setShortcuts(prev => {
@@ -924,10 +935,18 @@ export default function App() {
 
     // Initial load silently
     gridInstance.current.removeAll();
+    terminalMountsRef.current.clear();
+    setTerminalMounts(new Map());
     shortcuts.forEach(item => addWidgetToGrid(item));
 
     if (maxCols !== currentCols.current) {
-      gridInstance.current.column(currentCols.current, 'move');
+      gridInstance.current.column(currentCols.current, 'none');
+    }
+    const needsArrange = currentCols.current !== maxCols || shortcuts.some(s => (s.x || 0) + (s.w || 1) > currentCols.current || (s.w || 1) > currentCols.current || (s.y || 0) < 0);
+    if (needsArrange) {
+      setTimeout(() => {
+        autoArrangeDashboardRef.current?.();
+      }, 100);
     }
 
     isInitializing.current = false;
@@ -1013,9 +1032,10 @@ export default function App() {
       allowSave.current = false;
       if (!gridInstance.current) return;
       const newCols = getColumns(layoutSize);
-      if (currentCols.current !== newCols) {
+      const colsChanged = currentCols.current !== newCols;
+      if (colsChanged) {
         currentCols.current = newCols;
-        gridInstance.current.column(newCols, 'move');
+        gridInstance.current.column(newCols, 'none');
       }
       
       const newCellHeight = getCellHeight(layoutSize);
@@ -1027,6 +1047,16 @@ export default function App() {
           node.subGrid.cellHeight(newCellHeight);
         }
       });
+
+      // Always auto-arrange when columns change or any items overflow the new screen width
+      const hasOverflow = gridInstance.current.engine.nodes.some(
+        (n: any) => (n.x || 0) + (n.w || 1) > newCols || (n.w || 1) > newCols
+      );
+      if (colsChanged || hasOverflow) {
+        setTimeout(() => {
+          autoArrangeDashboardRef.current?.();
+        }, 50);
+      }
     };
 
     let resizeTimer: NodeJS.Timeout;
@@ -1105,9 +1135,11 @@ export default function App() {
     window.addEventListener('contextmenu', handleContextMenu);
     window.addEventListener('click', handleClick);
     window.addEventListener('resize', debouncedResize);
+    window.addEventListener('orientationchange', debouncedResize);
 
     return () => {
       window.removeEventListener('resize', debouncedResize);
+      window.removeEventListener('orientationchange', debouncedResize);
       window.removeEventListener('contextmenu', handleContextMenu);
       window.removeEventListener('click', handleClick);
       if (gridInstance.current) {
@@ -1235,6 +1267,40 @@ export default function App() {
           <div class="grid-stack flex-1 mt-1 px-0 overflow-visible w-full"></div>
         </div>
       `;
+    } else if (item.type === 'widget' || item.widgetType === 'terminal') {
+      const defaultW = isSmall ? 8 : isLarge ? 5 : 6;
+      const defaultH = 24;
+
+      const opts: any = {
+        id: item.id,
+        w: item.w || defaultW,
+        h: item.h || defaultH,
+        minW: 3,
+        minH: 12,
+        noResize: false,
+      };
+      if (item.x !== undefined) opts.x = item.x;
+      if (item.y !== undefined) opts.y = item.y;
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'grid-stack-item terminal-widget-grid-item';
+      wrapper.setAttribute('gs-id', item.id);
+
+      const mountContainer = document.createElement('div');
+      mountContainer.className = 'grid-stack-item-content terminal-mount-point w-full h-full';
+      wrapper.appendChild(mountContainer);
+
+      if (!targetGrid) {
+        gridContainerRef.current.appendChild(wrapper);
+      } else {
+        targetGrid.el.appendChild(wrapper);
+      }
+
+      grid.makeWidget(wrapper, opts);
+
+      terminalMountsRef.current.set(item.id, { el: mountContainer, item });
+      setTerminalMounts(new Map(terminalMountsRef.current));
+      return;
     } else {
       const defaultIcon = '/default-globe.svg';
       const domain = (() => { try { return new URL(item.url).hostname; } catch { return ''; } })();
@@ -1489,6 +1555,289 @@ export default function App() {
     }, 100);
   };
 
+  const addTerminalWidget = (customTitle = 'Terminal') => {
+    if (!gridInstance.current) return;
+    const isSmall = layoutSize === 'small';
+    const isLarge = layoutSize === 'large';
+    const defaultW = isSmall ? 8 : isLarge ? 5 : 6;
+    const defaultH = 24;
+
+    const newItem: ShortcutItem = {
+      id: 'terminal_' + Math.random().toString(36).substring(2, 9),
+      type: 'widget',
+      widgetType: 'terminal',
+      title: customTitle,
+      url: '#',
+      w: defaultW,
+      h: defaultH,
+      widgetConfig: {
+        transparent: true,
+        opacity: 70,
+        blur: 16
+      }
+    };
+
+    setShortcuts(prev => {
+      const updated = [...prev, newItem];
+      fetch('/api/settings', {
+        method: 'PUT',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) })
+      }).catch(console.error);
+      return updated;
+    });
+
+    addWidgetToGrid(newItem);
+
+    setTimeout(() => {
+      saveGridState();
+    }, 100);
+  };
+
+  const updateWidgetConfig = (id: string, newConfig: Record<string, any>) => {
+    updateShortcutDynamically(id, { widgetConfig: newConfig });
+  };
+
+  const autoArrangeDashboard = () => {
+    if (!gridInstance.current) return;
+    const grid = gridInstance.current;
+    const cols = currentCols.current;
+    const allRootNodes = (grid.engine?.nodes || []).slice();
+    if (allRootNodes.length === 0) return;
+
+    // Filter to only nodes that are currently in the DOM
+    const rootNodes = allRootNodes.filter(node => node && node.el && document.body.contains(node.el));
+    if (rootNodes.length === 0) return;
+
+    // Sort nodes primarily by visual order (top-to-bottom, then left-to-right)
+    rootNodes.sort((a, b) => {
+      const aY = a.y !== undefined ? a.y : 0;
+      const bY = b.y !== undefined ? b.y : 0;
+      const aX = a.x !== undefined ? a.x : 0;
+      const bX = b.x !== undefined ? b.x : 0;
+      if (Math.abs(aY - bY) > 2) return aY - bY;
+      return aX - bX;
+    });
+
+    const itemsToPack: {
+      node: any;
+      el: HTMLElement;
+      id: string;
+      itemType: string;
+      w: number;
+      h: number;
+    }[] = [];
+
+    // Height padding according to STRICT user rule 1:
+    const extra = layoutSize === 'small' ? 4 : layoutSize === 'large' ? 3 : 4;
+
+    for (const node of rootNodes) {
+      const el = node.el;
+      const id = node.id || el?.getAttribute('gs-id');
+      const registered = (id ? itemRegistry.current.get(id) : null) || shortcuts.find(s => s.id === id);
+      const itemType = registered?.type || (node.subGrid ? 'container' : 'app');
+
+      if (itemType === 'category') {
+        itemsToPack.push({
+          node,
+          el,
+          id,
+          itemType,
+          w: cols,
+          h: layoutSize === 'small' ? 3 : 4
+        });
+        continue;
+      }
+
+      if (itemType === 'container' && node.subGrid) {
+        const subGrid = node.subGrid;
+        const allChildNodes = (subGrid.engine?.nodes || []).slice();
+        const childNodes = allChildNodes.filter(cn => cn && cn.el && document.body.contains(cn.el));
+        const childCount = childNodes.length;
+
+        // Determine optimal container width 'targetW':
+        let targetW: number;
+        if (childCount === 0) {
+          targetW = Math.min(2, cols);
+        } else if (childCount <= cols) {
+          // Can fit in a single clean row
+          targetW = Math.max(2, Math.min(childCount, cols));
+        } else {
+          // Wraps across multiple rows: choose an appealing divisor
+          if (childCount >= 6 && cols >= 4 && childCount % 4 === 0) {
+            targetW = 4;
+          } else if (childCount >= 6 && cols >= 3 && childCount % 3 === 0) {
+            targetW = 3;
+          } else {
+            targetW = cols;
+          }
+        }
+        targetW = Math.max(1, Math.min(targetW, cols));
+
+        // Update subgrid column count
+        subGrid.column(targetW, 'list');
+
+        // Order children visually
+        childNodes.sort((a, b) => {
+          const aY = a.y !== undefined ? a.y : 0;
+          const bY = b.y !== undefined ? b.y : 0;
+          const aX = a.x !== undefined ? a.x : 0;
+          const bX = b.x !== undefined ? b.x : 0;
+          if (Math.abs(aY - bY) > 2) return aY - bY;
+          return aX - bX;
+        });
+
+        // Batch update children inside subgrid
+        if (typeof (subGrid as any).batchUpdate === 'function') {
+          (subGrid as any).batchUpdate();
+        }
+        childNodes.forEach((childNode, idx) => {
+          const cx = idx % targetW;
+          const cy = Math.floor(idx / targetW) * 8; // Snap to 8-unit vertical scale
+          subGrid.update(childNode.el, { x: cx, y: cy, w: 1, h: 8 });
+        });
+        if (typeof (subGrid as any).commit === 'function') {
+          (subGrid as any).commit();
+        }
+
+        // Calculate required container height adhering to Rule 1 formula
+        const totalRows = Math.ceil(childCount / targetW) || 1;
+        const maxBottom = totalRows * 8;
+        const requiredH = maxBottom + extra;
+
+        itemsToPack.push({
+          node,
+          el,
+          id,
+          itemType,
+          w: targetW,
+          h: requiredH
+        });
+        continue;
+      }
+
+      if (itemType === 'widget' || registered?.widgetType === 'terminal') {
+        const defaultW = layoutSize === 'small' ? 8 : layoutSize === 'large' ? 5 : 6;
+        const widgetW = Math.max(1, Math.min(node.w || defaultW, cols));
+        const widgetH = Math.max(12, node.h || 24);
+        itemsToPack.push({
+          node,
+          el,
+          id,
+          itemType,
+          w: widgetW,
+          h: widgetH
+        });
+        continue;
+      }
+
+      // Default standalone app on root grid
+      itemsToPack.push({
+        node,
+        el,
+        id,
+        itemType,
+        w: 1,
+        h: 8
+      });
+    }
+
+    // 2D Bin Packing onto root grid with 'cols' columns
+    const gridOccupied: boolean[][] = [];
+
+    const isCellOccupied = (x: number, y: number): boolean => {
+      if (x < 0 || x >= cols || y < 0) return true;
+      if (!gridOccupied[y]) return false;
+      return !!gridOccupied[y][x];
+    };
+
+    const canPlace = (x: number, y: number, w: number, h: number): boolean => {
+      if (x + w > cols) return false;
+      for (let r = 0; r < h; r++) {
+        for (let c = 0; c < w; c++) {
+          if (isCellOccupied(x + c, y + r)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    };
+
+    const markOccupied = (x: number, y: number, w: number, h: number) => {
+      for (let r = 0; r < h; r++) {
+        const row = y + r;
+        if (!gridOccupied[row]) {
+          gridOccupied[row] = [];
+        }
+        for (let c = 0; c < w; c++) {
+          gridOccupied[row][x + c] = true;
+        }
+      }
+    };
+
+    const plannedPlacements: { el: HTMLElement; x: number; y: number; w: number; h: number }[] = [];
+
+    for (const item of itemsToPack) {
+      const itemW = Math.min(item.w, cols);
+      const itemH = item.h;
+
+      let placed = false;
+      for (let y = 0; !placed && y < 10000; y++) {
+        if (item.itemType === 'category') {
+          // Category header spans full width
+          let rowFree = true;
+          for (let c = 0; c < cols; c++) {
+            if (isCellOccupied(c, y)) {
+              rowFree = false;
+              break;
+            }
+          }
+          if (rowFree && canPlace(0, y, cols, itemH)) {
+            markOccupied(0, y, cols, itemH);
+            plannedPlacements.push({ el: item.el, x: 0, y, w: cols, h: itemH });
+            placed = true;
+            break;
+          }
+          continue;
+        }
+
+        for (let x = 0; x <= cols - itemW; x++) {
+          if (canPlace(x, y, itemW, itemH)) {
+            markOccupied(x, y, itemW, itemH);
+            plannedPlacements.push({ el: item.el, x, y, w: itemW, h: itemH });
+            placed = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // Apply placements with batchUpdate
+    if (typeof (grid as any).batchUpdate === 'function') {
+      (grid as any).batchUpdate();
+    }
+    plannedPlacements.forEach(({ el, x, y, w, h }) => {
+      grid.update(el, { x, y, w, h, minW: 1, minH: h });
+    });
+    if (typeof (grid as any).commit === 'function') {
+      (grid as any).commit();
+    }
+
+    // Re-trigger updateMinSize on all subgrids
+    rootNodes.forEach(node => {
+      if (node.subGrid && typeof (node.subGrid as any).updateMinSize === 'function') {
+        (node.subGrid as any).updateMinSize();
+      }
+    });
+
+    setTimeout(() => {
+      saveGridState();
+    }, 150);
+  };
+
+  autoArrangeDashboardRef.current = autoArrangeDashboard;
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const listLength = filteredApps.length > 0 ? filteredApps.length : searchResults.length;
     
@@ -1643,8 +1992,8 @@ export default function App() {
         }}
       />
 
-      {/* Main Content (slid up to top now that header bar is removed) */}
-      <main className="w-full mx-auto px-4 sm:px-6 lg:px-8 pt-3 sm:pt-4 pb-28 min-h-screen relative z-10">
+      {/* Main Content (with top padding to avoid toolbar clipping) */}
+      <main className="w-full mx-auto px-4 sm:px-6 lg:px-8 pt-12 sm:pt-14 pb-28 min-h-screen relative z-10">
         <div className="grid-stack" ref={gridContainerRef}></div>
 
         {/* Recycle Bin Drop Zone / Button */}
@@ -1791,6 +2140,37 @@ export default function App() {
             {isInputFocused && searchQuery.trim().length > 0 && (
               <div className="absolute bottom-full left-0 w-full mb-1 bg-neutral-900 border border-neutral-800 rounded-t-3xl rounded-b-lg shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 z-50">
                 
+                {/* Quick Add Terminal Widget Suggestion */}
+                {(searchQuery.toLowerCase().includes('term') ||
+                  searchQuery.toLowerCase().includes('ssh') ||
+                  searchQuery.toLowerCase().includes('shell') ||
+                  searchQuery.toLowerCase().includes('bash') ||
+                  searchQuery.toLowerCase().includes('widget')) && (
+                  <div
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setIsInputFocused(false);
+                      setSearchQuery('');
+                      addTerminalWidget();
+                    }}
+                    className="px-4 py-3 cursor-pointer flex items-center justify-between bg-blue-600/10 hover:bg-blue-600/20 border-b border-neutral-800 transition-colors group"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 rounded-lg bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 group-hover:scale-105 transition-transform">
+                        <TerminalIcon size={16} />
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-neutral-100 flex items-center gap-2">
+                          <span>Add Terminal Widget</span>
+                          <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded font-mono uppercase">SSH</span>
+                        </div>
+                        <p className="text-xs text-neutral-400">Multi-tab SSH shell with customizable transparency</p>
+                      </div>
+                    </div>
+                    <Plus size={16} className="text-blue-400" />
+                  </div>
+                )}
+
                 {filteredApps.length > 0 ? (
                   <ul className="py-2">
                     {filteredApps.map((app, idx) => (
@@ -2111,6 +2491,35 @@ export default function App() {
                     </button>
                   ))}
                </div>
+            </div>
+          </section>
+
+          {/* Dashboard Widgets */}
+          <section className="pt-4 border-t border-neutral-800">
+            <h3 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider mb-2">Widgets</h3>
+            <p className="text-xs text-neutral-500 mb-4">Scalable dynamic widgets that adapt across Small, Medium, and Large layout modes.</p>
+
+            <div className="p-3.5 rounded-2xl bg-neutral-950/70 border border-neutral-800/80 hover:border-neutral-700/80 transition-all flex items-center justify-between gap-3">
+              <div className="flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/15 border border-blue-500/25 flex items-center justify-center text-blue-400 shrink-0">
+                  <TerminalIcon size={18} />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-sm font-semibold text-neutral-200">Terminal Shell (SSH)</h4>
+                  <p className="text-[11px] text-neutral-400 truncate">Multi-tab SSH with customizable transparency & profiles</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  addTerminalWidget();
+                  setIsSettingsOpen(false);
+                }}
+                className="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shrink-0 flex items-center gap-1.5 shadow-lg shadow-blue-600/30 active:scale-95"
+              >
+                <Plus size={14} />
+                <span>Add</span>
+              </button>
             </div>
           </section>
 
@@ -2603,6 +3012,25 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Terminal Widget Portals mounted directly into GridStack nodes */}
+      {Array.from(terminalMounts.entries()).map(([id, { el, item }]) => {
+        const currentItem = itemRegistry.current.get(id) || shortcuts.find(s => s.id === id) || item;
+        return createPortal(
+          <TerminalWidget
+            key={id}
+            item={currentItem}
+            layoutSize={layoutSize}
+            onUpdateConfig={(cfg) => updateWidgetConfig(id, cfg)}
+            onRemove={() => {
+              if ((window as any).removeShortcut) {
+                (window as any).removeShortcut(id);
+              }
+            }}
+          />,
+          el
+        );
+      })}
 
     </div>
   );

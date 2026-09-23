@@ -1,6 +1,6 @@
 {
   "name": "Startarr",
-  "description": "A drag-and-drop customizable homepage for app shortcuts.",
+  "description": "A drag-and-drop customizable dashboard homepage for app shortcuts and scalable widgets including remote SSH terminals.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
