@@ -9,12 +9,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/auth/me')
+    const token = localStorage.getItem('auth_token');
+    fetch('/api/auth/me', {
+      credentials: 'include',
+      headers: {
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      }
+    })
       .then(res => {
         if (res.ok) return res.json();
         throw new Error('Not logged in');
       })
       .then(data => {
+        if (data.token) {
+          localStorage.setItem('auth_token', data.token);
+        }
         setUser(data.user);
         setLoading(false);
       })
@@ -28,13 +37,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
       if (res.ok) {
-        const meRes = await fetch('/api/auth/me');
-        const data = await meRes.json();
-        setUser(data.user);
+        const data = await res.json();
+        if (data.token) {
+          localStorage.setItem('auth_token', data.token);
+        }
+        if (data.user) {
+          setUser(data.user);
+          return true;
+        }
+        const token = data.token || localStorage.getItem('auth_token');
+        const meRes = await fetch('/api/auth/me', {
+          credentials: 'include',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+        const meData = await meRes.json();
+        setUser(meData.user);
         return true;
       }
       return false;
@@ -48,13 +70,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
       if (res.ok) {
-        const meRes = await fetch('/api/auth/me');
-        const data = await meRes.json();
-        setUser(data.user);
+        const data = await res.json();
+        if (data.token) {
+          localStorage.setItem('auth_token', data.token);
+        }
+        if (data.user) {
+          setUser(data.user);
+          return true;
+        }
+        const token = data.token || localStorage.getItem('auth_token');
+        const meRes = await fetch('/api/auth/me', {
+          credentials: 'include',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+        const meData = await meRes.json();
+        setUser(meData.user);
         return true;
       }
       return false;
@@ -66,10 +101,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      const token = localStorage.getItem('auth_token');
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
     } catch (e) {
       console.error(e);
     } finally {
+      localStorage.removeItem('auth_token');
       setUser(null);
     }
   };

@@ -21,6 +21,7 @@ import {
   Edit2
 } from 'lucide-react';
 import { ShortcutItem, SshProfile } from '../types';
+import { apiFetch } from '../App';
 
 interface TerminalTab {
   id: string;
@@ -106,7 +107,7 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
   const fetchProfiles = useCallback(async () => {
     try {
       setIsLoadingProfiles(true);
-      const res = await fetch('/api/ssh/profiles');
+      const res = await apiFetch('/api/ssh/profiles');
       if (res.ok) {
         const data = await res.json();
         setProfiles(data);
@@ -415,7 +416,7 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
 
     if (formSaveProfile) {
       try {
-        const res = await fetch('/api/ssh/profiles', {
+        const res = await apiFetch('/api/ssh/profiles', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

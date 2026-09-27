@@ -178,14 +178,27 @@ export const pickBestColouredIcon = (icons: string[], url?: string): string => {
   return valid[0] || '/default-globe.svg';
 };
 
+export const apiFetch = (url: string, options: RequestInit = {}) => {
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  const headers = new Headers(options.headers || {});
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  return fetch(url, {
+    credentials: 'include',
+    ...options,
+    headers
+  });
+};
+
 export default function App() {
   const { user, logout } = React.useContext(AuthContext);
   const [dataLoaded, setDataLoaded] = useState(false);
   
   useEffect(() => {
     Promise.all([
-      fetch('/api/settings').then(res => res.ok ? res.json() : null).catch(() => null),
-      fetch('/api/backgrounds').then(res => res.ok ? res.json() : []).catch(() => [])
+      apiFetch('/api/settings').then(res => res.ok ? res.json() : null).catch(() => null),
+      apiFetch('/api/backgrounds').then(res => res.ok ? res.json() : []).catch(() => [])
     ]).then(([settings, bgData]) => {
       if (settings) {
         if (settings.layout_size) setLayoutSize(settings.layout_size);
@@ -210,7 +223,7 @@ export default function App() {
       if (settings && settings.shortcuts_json) {
         try {
           const parsed = JSON.parse(settings.shortcuts_json);
-          if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+          if (parsed && Array.isArray(parsed)) {
             // Un-nest any containers or widgets that may have accidentally been dropped inside another container's children
             const sanitized: any[] = [];
             parsed.forEach((p: any) => {
@@ -240,7 +253,7 @@ export default function App() {
               // Multiply h by 8 if it's the old 1x format. 
               // We assume old apps have h:1. Old containers have h:2 or 3.
               // New apps will have h:8.
-              h: (p.type === 'app' && p.h < 8) ? 8 : (p.type === 'category' && p.h < 4 ? 4 : (p.type === 'container' && p.h < 8 ? p.h * 8 : ((p.type === 'widget' || p.widgetType === 'terminal') && (!p.h || p.h < 12) ? 24 : p.h)))
+              h: (p.type === 'app' && (!p.h || p.h < 8)) ? 8 : (p.type === 'category' && (!p.h || p.h < 4) ? 4 : (p.type === 'container' && (!p.h || p.h < 8) ? (p.h ? p.h * 8 : 12) : ((p.type === 'widget' || p.widgetType === 'terminal') && (!p.h || p.h < 12) ? 24 : p.h)))
             }));
             try {
               localStorage.setItem('shortcuts', JSON.stringify(sanitizedClean));
@@ -262,9 +275,8 @@ export default function App() {
                   const brand = getDomainBrand(item.url);
                   const titleClean = (item.title || '').split(/[-|–|—|:•·]/)[0].trim();
                   updateShortcutDynamically(item.id, { isLoading: true });
-                  fetch('/api/scrape-metadata', {
+                  apiFetch('/api/scrape-metadata', {
                     method: 'POST',
-                    credentials: 'include',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url: item.url, query: brand || titleClean || '' })
                   })
@@ -345,7 +357,7 @@ export default function App() {
       try {
         localStorage.setItem('shortcuts', JSON.stringify(cleanUpdated));
       } catch (e) {}
-      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(cleanUpdated) }) }).catch(console.error);
+      apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(cleanUpdated) }) }).catch(console.error);
       return updated;
     });
     
@@ -589,9 +601,8 @@ export default function App() {
       }
 
       if (targetUrl) {
-        const res = await fetch('/api/scrape-metadata', {
+        const res = await apiFetch('/api/scrape-metadata', {
           method: 'POST',
-          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: targetUrl, query: searchQuery })
         });
@@ -651,7 +662,7 @@ export default function App() {
   const [uploadingBg, setUploadingBg] = useState(false);
 
   useEffect(() => {
-    fetch('/api/backgrounds')
+    apiFetch('/api/backgrounds')
       .then(res => {
         if (res.headers.get('content-type')?.includes('application/json')) {
           return res.json();
@@ -671,7 +682,7 @@ export default function App() {
     localStorage.setItem('uiOpacity', String(uiOpacity));
     localStorage.setItem('uiBlur', String(uiBlur));
     if (dataLoaded) {
-      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' },
+      apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           active_background: activeBackground,
           tint_color: tintColor,
@@ -690,7 +701,7 @@ export default function App() {
     formData.append('file', file);
     setUploadingBg(true);
     try {
-      const res = await fetch('/api/backgrounds', { method: 'POST', body: formData });
+      const res = await apiFetch('/api/backgrounds', { method: 'POST', body: formData });
       if (!res.headers.get('content-type')?.includes('application/json')) {
         throw new Error('Upload intercepted or failed');
       }
@@ -880,7 +891,7 @@ export default function App() {
             try {
               localStorage.setItem('shortcuts', JSON.stringify(updated));
             } catch (e) {}
-            fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+            apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
             
             // Trigger a resize event to ensure layout recalculations (instead of full reload)
             setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
@@ -902,7 +913,7 @@ export default function App() {
   useEffect(() => {
     if (!dataLoaded) return;
     const timer = setTimeout(() => {
-      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_bin_json: JSON.stringify(recycleBin) }) }).catch(console.error);
+      apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_bin_json: JSON.stringify(recycleBin) }) }).catch(console.error);
     }, 500);
     return () => clearTimeout(timer);
   }, [recycleBin, dataLoaded]);
@@ -912,7 +923,7 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('layoutSize', layoutSize);
     if (dataLoaded) {
-      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' },
+      apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ layout_size: layoutSize })
       }).catch(console.error);
     }
@@ -923,7 +934,7 @@ export default function App() {
 
   // Initialize GridStack
   useEffect(() => {
-    if (!gridContainerRef.current) return;
+    if (!gridContainerRef.current || !dataLoaded) return;
     isInitializing.current = true;
     
     currentCols.current = getColumns(layoutSize);
@@ -945,7 +956,18 @@ export default function App() {
       float: true,
       animate: true,
       disableResize: false,
-      acceptWidgets: false, // Prevents dragged app shortcuts from popping out onto the dashboard
+      acceptWidgets: (el: Element) => {
+        if (!el) return false;
+        // Never accept containers or anything containing a subgrid as a nested widget on the main grid
+        if (
+          el.classList.contains('container-grid-item') ||
+          el.getAttribute('data-item-type') === 'container' ||
+          el.querySelector('.grid-stack') !== null
+        ) {
+          return false;
+        }
+        return true;
+      },
       removable: '.recycle-bin-zone',
       removeTimeout: 0,
       draggable: {
@@ -960,14 +982,14 @@ export default function App() {
     shortcuts.forEach(item => addWidgetToGrid(item));
 
     isInitializing.current = false;
-    setTimeout(() => { allowSave.current = true; }, 200);
+    allowSave.current = true;
 
     // Now listen to events
     
     // Ensure all items are in registry
     const addToRegistry = (list: ShortcutItem[]) => {
       list.forEach(i => {
-        itemRegistry.current.set(i.id, { ...i });
+        itemRegistry.current.set(String(i.id), { ...i, id: String(i.id) });
         if (i.children) addToRegistry(i.children);
       });
     };
@@ -1176,92 +1198,115 @@ export default function App() {
   const saveGridState = () => {
     saveGridStateRef.current = saveGridState;
 
-    if (!gridInstance.current || isInitializing.current || !allowSave.current) return;
+    if (!gridInstance.current || isInitializing.current) return;
     const extractNodes = (grid: any): any[] => {
       if (!grid || !grid.engine || !grid.engine.nodes) return [];
       return grid.engine.nodes.map((node: any) => {
         const rawId = node.id || node.el?.getAttribute("gs-id");
         const id = rawId ? String(rawId) : undefined;
-        const res: any = { id, x: node.x, y: node.y, w: node.w, h: node.h };
+        if (!id || id === 'undefined' || node.el?.classList.contains('grid-stack-placeholder')) {
+          return null;
+        }
+        const x = node.x !== undefined ? node.x : (node.el ? Number(node.el.getAttribute("gs-x")) : 0);
+        const y = node.y !== undefined ? node.y : (node.el ? Number(node.el.getAttribute("gs-y")) : 0);
+        const w = node.w !== undefined ? node.w : (node.el ? Number(node.el.getAttribute("gs-w")) : 1);
+        const h = node.h !== undefined ? node.h : (node.el ? Number(node.el.getAttribute("gs-h")) : 1);
+        const res: any = { id, x, y, w, h };
         const subGridInstance = node.subGrid || node.el?.querySelector('.grid-stack')?.gridstack;
         if (subGridInstance) {
-          res.children = extractNodes(subGridInstance);
+          res.children = extractNodes(subGridInstance).filter(Boolean);
         }
         return res;
-      });
+      }).filter(Boolean);
     };
     const items = extractNodes(gridInstance.current);
+    if (!items || items.length === 0) return;
 
-
-    
-    setShortcuts(prev => {
-      // Deep find helper
-      const findDeep = (list: ShortcutItem[], searchId: string): ShortcutItem | null => {
-         for (const i of list) {
-           if (i.id === searchId) return i;
-           if (i.children) {
-             const found = findDeep(i.children, searchId);
-             if (found) return found;
-           }
-         }
-         return null;
-      };
-
-      const safeFind = (searchId: string) => {
-        if (itemRegistry.current.has(searchId)) {
-           return itemRegistry.current.get(searchId);
+    // Deep find helper
+    const findDeep = (list: ShortcutItem[], searchId: string): ShortcutItem | null => {
+      for (const i of list) {
+        if (String(i.id) === searchId) return i;
+        if (i.children) {
+          const found = findDeep(i.children, searchId);
+          if (found) return found;
         }
-        let found = findDeep(prev, searchId);
-        if (!found) found = findDeep(JSON.parse(localStorage.getItem('shortcuts') || '[]'), searchId);
-        return found;
+      }
+      return null;
+    };
+
+    const safeFind = (searchId: string) => {
+      const strId = String(searchId);
+      if (itemRegistry.current.has(strId)) {
+        return itemRegistry.current.get(strId);
+      }
+      for (const [k, v] of itemRegistry.current.entries()) {
+        if (String(k) === strId || String(v?.id) === strId) return v;
+      }
+      let found = findDeep(shortcuts, strId);
+      if (!found) {
+        try {
+          found = findDeep(JSON.parse(localStorage.getItem('shortcuts') || '[]'), strId);
+        } catch (e) {}
+      }
+      return found;
+    };
+
+    // Recursive map to preserve children
+    const mapItem = (item: any): ShortcutItem | null => {
+      const rawId = item.id || item.content?.match(/gs-id="([^"]+)"/)?.[1] || item.el?.getAttribute('gs-id');
+      const id = rawId ? String(rawId) : null;
+      const existing = id ? safeFind(id) : null;
+      if (!existing) return null;
+
+      const childrenData = item.children || item.subGrid?.children || item.subGridOpts?.children;
+      const mappedChildren = (childrenData && Array.isArray(childrenData))
+        ? childrenData.map(mapItem).filter(Boolean) as ShortcutItem[]
+        : [];
+
+      const { el, subGrid, subGridOpts, content, isLoading, ...restExisting } = existing as any;
+      return {
+        ...restExisting,
+        id: String(existing.id || id),
+        x: item.x !== undefined ? item.x : restExisting.x,
+        y: item.y !== undefined ? item.y : restExisting.y,
+        w: item.w !== undefined ? item.w : restExisting.w,
+        h: item.h !== undefined ? item.h : restExisting.h,
+        children: mappedChildren.length > 0 ? mappedChildren : undefined
       };
-
-      // Recursive map to preserve children
-      const mapItem = (item: any): ShortcutItem | null => {
-        const rawId = item.id || item.content?.match(/gs-id="([^"]+)"/)?.[1] || item.el?.getAttribute('gs-id');
-        const id = rawId ? String(rawId) : null;
-        const existing = id ? safeFind(id) : null;
-        if (!existing) return null;
-
-        const childrenData = item.subGrid?.children || item.subGridOpts?.children || item.children;
-        const mappedChildren = (childrenData && Array.isArray(childrenData))
-          ? childrenData.map(mapItem).filter(Boolean) as ShortcutItem[]
-          : [];
-
-        const { el, subGrid, subGridOpts, content, isLoading, ...restExisting } = existing as any;
-        return {
-          ...restExisting,
-          x: item.x,
-          y: item.y,
-          w: item.w,
-          h: item.h,
-          children: mappedChildren.length > 0 ? mappedChildren : undefined
-        };
-      };
+    };
 
     const updated = items.map(mapItem).filter(Boolean) as ShortcutItem[];
-      
-      // Keep itemRegistry up to date with the latest tree structure!
-      const refreshRegistry = (list: ShortcutItem[]) => {
-        list.forEach(i => {
-           itemRegistry.current.set(i.id, { ...i });
-           if (i.children) refreshRegistry(i.children);
-        });
-      };
-      // itemRegistry.current.clear(); removed to preserve detached items for the recycle bin
-      refreshRegistry(updated);
+    if (updated.length === 0) return;
+    
+    // Keep itemRegistry up to date with the latest tree structure!
+    const refreshRegistry = (list: ShortcutItem[]) => {
+      list.forEach(i => {
+        itemRegistry.current.set(String(i.id), { ...i, id: String(i.id) });
+        if (i.children) refreshRegistry(i.children);
+      });
+    };
+    refreshRegistry(updated);
 
-      try {
-        localStorage.setItem('shortcuts', JSON.stringify(updated));
-      } catch (e) {}
-      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
-      return updated;
-    });
+    try {
+      localStorage.setItem('shortcuts', JSON.stringify(updated));
+    } catch (e) {}
+
+    apiFetch('/api/settings', {
+      method: 'PUT',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) })
+    }).catch(console.error);
+
+    setShortcuts(updated);
   };
+  saveGridStateRef.current = saveGridState;
 
   const addWidgetToGrid = (item: ShortcutItem, targetGrid?: any) => {
     const grid = targetGrid || gridInstance.current;
     if (!grid) return;
+    
+    itemRegistry.current.set(String(item.id), { ...item, id: String(item.id) });
     
     let htmlContent = '';
     const isSmall = layoutSize === 'small';
@@ -1313,6 +1358,10 @@ export default function App() {
       wrapper.className = 'grid-stack-item terminal-widget-grid-item widget-grid-item';
       wrapper.setAttribute('gs-id', item.id);
       wrapper.setAttribute('data-item-type', 'widget');
+      if (item.x !== undefined) wrapper.setAttribute('gs-x', String(item.x));
+      if (item.y !== undefined) wrapper.setAttribute('gs-y', String(item.y));
+      if (opts.w !== undefined) wrapper.setAttribute('gs-w', String(opts.w));
+      if (opts.h !== undefined) wrapper.setAttribute('gs-h', String(opts.h));
 
       const mountContainer = document.createElement('div');
       mountContainer.className = 'grid-stack-item-content terminal-mount-point w-full h-full';
@@ -1542,7 +1591,7 @@ export default function App() {
       try {
         localStorage.setItem('shortcuts', JSON.stringify(updated));
       } catch (e) {}
-      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+      apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
       return updated;
     });
 
@@ -1552,9 +1601,8 @@ export default function App() {
     // Background metadata check to enhance shortcut with high-res SVG or official brand logo from actual domain
     if (needsScrape) {
       setTimeout(() => updateShortcutDynamically(newItem.id, { isLoading: false }), 20000);
-      fetch('/api/scrape-metadata', {
+      apiFetch('/api/scrape-metadata', {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: app.url, query: resolvedTitle })
       })
@@ -1602,7 +1650,7 @@ export default function App() {
       try {
         localStorage.setItem('shortcuts', JSON.stringify(updated));
       } catch (e) {}
-      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+      apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
       return updated;
     });
 
@@ -1641,7 +1689,7 @@ export default function App() {
       try {
         localStorage.setItem('shortcuts', JSON.stringify(updated));
       } catch (e) {}
-      fetch('/api/settings', {
+      apiFetch('/api/settings', {
         method: 'PUT',
         keepalive: true,
         headers: { 'Content-Type': 'application/json' },
@@ -1942,7 +1990,7 @@ export default function App() {
           try {
             localStorage.setItem('shortcuts', JSON.stringify(updated));
           } catch (e) {}
-          fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+          apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
           return updated;
         });
         addWidgetToGrid(newItem);
@@ -1950,9 +1998,8 @@ export default function App() {
         // Fetch metadata in the background
         setTimeout(() => updateShortcutDynamically(newId, { isLoading: false }), 20000);
         const brandQuery = getDomainBrand(formattedUrl) || '';
-        fetch('/api/scrape-metadata', {
+        apiFetch('/api/scrape-metadata', {
           method: 'POST',
-          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: formattedUrl, query: brandQuery })
         })
@@ -2156,7 +2203,7 @@ export default function App() {
                           try {
                             localStorage.setItem('shortcuts', JSON.stringify(updated));
                           } catch (e) {}
-                          fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+                          apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
                           return updated;
                         });
                         addWidgetToGrid(newItem);
@@ -2164,9 +2211,8 @@ export default function App() {
                         // Fetch metadata in the background
                         setTimeout(() => updateShortcutDynamically(newId, { isLoading: false }), 20000);
                         const brandQuery = getDomainBrand(formattedUrl) || '';
-                        fetch('/api/scrape-metadata', {
+                        apiFetch('/api/scrape-metadata', {
                           method: 'POST',
-                          credentials: 'include',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ url: formattedUrl, query: brandQuery })
                         })
@@ -2369,7 +2415,7 @@ export default function App() {
                 onClick={() => {
                   const val = !showRecycleBin;
                   setShowRecycleBin(val);
-                  fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ show_recycle_bin: val }) }).catch(console.error);
+                  apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ show_recycle_bin: val }) }).catch(console.error);
                 }}
                 className={`w-11 h-6 rounded-full transition-colors relative ${showRecycleBin ? 'bg-emerald-500' : 'bg-neutral-700'}`}
               >
