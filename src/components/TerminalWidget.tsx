@@ -88,6 +88,7 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
   const [formUser, setFormUser] = useState('');
   const [formAuthType, setFormAuthType] = useState<'password' | 'privateKey'>('password');
   const [formPassword, setFormPassword] = useState('');
+  const passwordInputRef = useRef<HTMLInputElement>(null);
   const [formPrivateKey, setFormPrivateKey] = useState('');
   const [formPassphrase, setFormPassphrase] = useState('');
   const [formSaveProfile, setFormSaveProfile] = useState(false);
@@ -460,6 +461,9 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
     if (p.authType === 'password') {
       // Prompt for password if not saved
       setShowConnectDialog(true);
+      setTimeout(() => {
+        passwordInputRef.current?.focus();
+      }, 60);
     } else {
       connectTab(activeTabId, {
         host: p.host,
@@ -877,70 +881,93 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
             onClick={() => setShowConnectDialog(false)}
           />
 
-          {/* Compact Centered Dialog Box (Explicit 320px width) */}
+          {/* Centered Modal Card (Compact 380px width, fits Quick Save connections cleanly) */}
           <div 
             style={{
               position: 'relative',
               zIndex: 2,
-              width: '320px',
-              maxWidth: '90vw',
+              width: '380px',
+              maxWidth: 'calc(100vw - 32px)',
               maxHeight: '90vh',
               boxSizing: 'border-box'
             }}
-            className="bg-neutral-900 border border-neutral-700/80 rounded-xl p-3.5 shadow-2xl space-y-2.5 text-neutral-200 overflow-y-auto no-scrollbar"
+            className="bg-neutral-900 border border-neutral-700/80 rounded-2xl p-4 shadow-2xl space-y-3 text-neutral-200 overflow-y-auto no-scrollbar"
             onClick={e => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-2 border-b border-neutral-800">
-              <div className="flex items-center space-x-1.5">
-                <div className="w-5 h-5 rounded-md bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-                  <TerminalIcon size={12} />
+            <div className="flex items-center justify-between pb-2.5 border-b border-neutral-800">
+              <div className="flex items-center space-x-2">
+                <div className="w-6 h-6 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                  <TerminalIcon size={13} />
                 </div>
-                <h4 className="text-xs font-semibold text-neutral-100">SSH Connection Settings</h4>
+                <div>
+                  <h4 className="text-xs font-semibold text-neutral-100">SSH Connection Settings</h4>
+                  <p className="text-[10px] text-neutral-400 leading-tight">Configure host credentials or pick a saved profile</p>
+                </div>
               </div>
 
-              <div className="flex items-center space-x-1.5">
-                {profiles.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowConnectDialog(false)}
+                className="text-neutral-400 hover:text-neutral-200 p-1 rounded-lg hover:bg-neutral-800 transition-colors"
+                title="Close"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Quick Saved Connection bar */}
+            {profiles.length > 0 && (
+              <div className="space-y-1.5 pb-2.5 border-b border-neutral-800/80">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">
+                      Quick Saved Connections
+                    </span>
+                    <span className="text-[10px] bg-neutral-800/90 text-neutral-400 px-1.5 py-0.2 rounded-full font-mono">
+                      {profiles.length}
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
                       setShowConnectDialog(false);
                       setShowProfilesModal(true);
                     }}
-                    className="text-[10px] text-blue-400 hover:text-blue-300 font-medium px-1.5 py-0.5 rounded hover:bg-neutral-800 transition-colors"
-                    title="Manage Profiles"
+                    className="text-[10px] text-blue-400 hover:text-blue-300 font-medium hover:underline transition-colors flex items-center gap-1"
+                    title="Manage all saved profiles"
                   >
-                    Saved ({profiles.length})
+                    <span>Manage</span>
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setShowConnectDialog(false)}
-                  className="text-neutral-500 hover:text-neutral-300 p-0.5 rounded transition-colors"
-                  title="Close"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            </div>
+                </div>
 
-            {/* Quick Saved Connection bar */}
-            {profiles.length > 0 && (
-              <div className="space-y-1">
-                <span className="text-[9px] font-semibold text-neutral-500 uppercase tracking-wider">Quick Saved Connection</span>
-                <div className="flex gap-1 overflow-x-auto no-scrollbar py-0.5">
-                  {profiles.map(p => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => handleSelectProfile(p)}
-                      className="flex items-center space-x-1 px-1.5 py-0.5 rounded-md bg-neutral-800/60 hover:bg-neutral-800 border border-neutral-700/50 text-left transition-colors shrink-0 max-w-[130px]"
-                      title={`${p.name} (${p.username}@${p.host}:${p.port})`}
-                    >
-                      <Server size={10} className="text-blue-400 shrink-0" />
-                      <span className="text-[10px] font-medium text-neutral-200 truncate">{p.name}</span>
-                    </button>
-                  ))}
+                <div className={`grid ${profiles.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} gap-1.5 max-h-[110px] overflow-y-auto pr-0.5 no-scrollbar`}>
+                  {profiles.map(p => {
+                    const isSelected = formHost === p.host && formUser === p.username && Number(formPort) === p.port;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => handleSelectProfile(p)}
+                        className={`group flex items-center space-x-2 p-2 rounded-xl border text-left transition-all ${
+                          isSelected
+                            ? 'bg-blue-500/15 border-blue-500/60 text-blue-200 shadow-sm ring-1 ring-blue-500/30'
+                            : 'bg-neutral-950/70 hover:bg-neutral-800/90 border-neutral-800 hover:border-neutral-700 text-neutral-300'
+                        }`}
+                        title={`${p.name} (${p.username}@${p.host}:${p.port})`}
+                      >
+                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                          isSelected ? 'bg-blue-500/20 text-blue-400' : 'bg-neutral-800/80 text-neutral-400 group-hover:text-blue-400'
+                        }`}>
+                          <Server size={12} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[11px] font-medium leading-tight truncate text-neutral-100">{p.name}</div>
+                          <div className="text-[9px] text-neutral-400 font-mono leading-tight truncate">{p.username}@{p.host}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -1011,6 +1038,7 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
                 <div className="space-y-0.5">
                   <label className="text-[10px] font-medium text-neutral-400">Password</label>
                   <input
+                    ref={passwordInputRef}
                     type="password"
                     placeholder="••••••••"
                     value={formPassword}
