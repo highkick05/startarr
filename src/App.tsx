@@ -299,36 +299,14 @@ export default function App() {
 
   const gridContainerRef = useRef<HTMLDivElement>(null);
 
-    // Absolute fallback: globally observe for dragged items
-    useEffect(() => {
-      const observer = new MutationObserver((mutations) => {
-      mutations.forEach(mutation => {
-        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-          const target = mutation.target;
-          if (target instanceof HTMLElement) {
-            if (target.classList.contains('ui-draggable-dragging') || target.classList.contains('grid-stack-item-dragging')) {
-              const parent = target.parentElement?.closest('.grid-stack-item');
-              if (parent) {
-                parent.classList.add('subgrid-is-dragging');
-                (parent as HTMLElement).style.zIndex = '2147483647';
-              }
-            } 
-          }
-          
-          // Clean up if nothing is being dragged anywhere
-          if (!document.querySelector('.ui-draggable-dragging, .grid-stack-item-dragging')) {
-             document.querySelectorAll('.subgrid-is-dragging').forEach(el => {
-               el.classList.remove('subgrid-is-dragging');
-               (el as HTMLElement).style.zIndex = '';
-             });
-             document.body.classList.remove('container-is-dragging');
-          }
-        }
-      });
-    });
-    observer.observe(document.body, { attributes: true, subtree: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const saveGridStateRef = useRef<() => void>(() => {});
+  const debouncedSaveGridState = (delay = 200) => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      saveGridStateRef.current();
+    }, delay);
+  };
 
   const gridInstance = useRef<GridStack | null>(null);
   const itemRegistry = useRef<Map<string, ShortcutItem>>(new Map());
@@ -1010,7 +988,7 @@ export default function App() {
               item.subGrid.column(item.w, 'list');
               widthChanged = true;
             }
-            if ((item.subGrid as any).updateMinSize) {
+            if (widthChanged && (item.subGrid as any).updateMinSize) {
               setTimeout(() => {
                  (item.subGrid as any).updateMinSize();
               }, 150);
@@ -1018,7 +996,7 @@ export default function App() {
           }
         });
       }
-      saveGridState();
+      debouncedSaveGridState();
     };
     
     const handleRemovedEvent = (e: any, items: any[]) => {
@@ -1070,9 +1048,14 @@ export default function App() {
         document.body.classList.add('container-is-dragging');
       }
     });
-    gridInstance.current.on('dragstop', () => {
+    const cleanupDragState = () => {
       document.body.classList.remove('container-is-dragging');
+    };
+    gridInstance.current.on('dragstop', () => {
+      cleanupDragState();
+      debouncedSaveGridState(50);
     });
+    window.addEventListener('mouseup', cleanupDragState);
 
     const handleResize = () => {
       allowSave.current = false;
@@ -1184,6 +1167,7 @@ export default function App() {
     window.addEventListener('orientationchange', debouncedResize);
 
     return () => {
+      window.removeEventListener('mouseup', cleanupDragState);
       window.removeEventListener('resize', debouncedResize);
       window.removeEventListener('orientationchange', debouncedResize);
       window.removeEventListener('contextmenu', handleContextMenu);
@@ -1198,6 +1182,7 @@ export default function App() {
   }, [layoutSize, dataLoaded, showRecycleBin]); // Re-init grid when layoutSize changes, data finishes loading, or recycle bin toggles
 
   const saveGridState = () => {
+    saveGridStateRef.current = saveGridState;
 
     if (!gridInstance.current || isInitializing.current || !allowSave.current) return;
     const extractNodes = (grid: any): any[] => {
@@ -1463,25 +1448,32 @@ export default function App() {
             item.children.forEach(child => addWidgetToGrid(child, subGrid));
           }
 
+          let isUpdatingMinSize = false;
           const updateMinSize = () => {
-            if (!subGrid.engine) return;
-            const nodes = subGrid.engine.nodes;
-            
-            let extra = layoutSize === 'small' ? 4 : layoutSize === 'large' ? 3 : 4;
-            let requiredH = 8 + extra;
-            if (nodes.length > 0) {
-              let maxBottom = 0;
-              nodes.forEach((n: any) => {
-                const snappedY = Math.round((n.y || 0) / 8) * 8;
-                const bottom = snappedY + (n.h || 1);
-                if (bottom > maxBottom) maxBottom = bottom;
-              });
-              requiredH = maxBottom + extra;
-            }
-            
-            const node = el.gridstackNode;
-            if (node && node.h !== requiredH) {
-               grid.update(el, { w: node.w, h: requiredH, minW: 1, minH: requiredH });
+            if (!subGrid.engine || isUpdatingMinSize) return;
+            if (document.body.classList.contains('container-is-dragging')) return;
+            isUpdatingMinSize = true;
+            try {
+              const nodes = subGrid.engine.nodes;
+              
+              let extra = layoutSize === 'small' ? 4 : layoutSize === 'large' ? 3 : 4;
+              let requiredH = 8 + extra;
+              if (nodes.length > 0) {
+                let maxBottom = 0;
+                nodes.forEach((n: any) => {
+                  const snappedY = Math.round((n.y || 0) / 8) * 8;
+                  const bottom = snappedY + (n.h || 1);
+                  if (bottom > maxBottom) maxBottom = bottom;
+                });
+                requiredH = maxBottom + extra;
+              }
+              
+              const node = el.gridstackNode;
+              if (node && node.h !== requiredH) {
+                 grid.update(el, { w: node.w, h: requiredH, minW: 1, minH: requiredH });
+              }
+            } finally {
+              isUpdatingMinSize = false;
             }
           };
 
@@ -1511,27 +1503,6 @@ export default function App() {
              }
           });
           subGrid.on('change', () => updateMinSize());
-          
-          subGrid.on('change', (e, items) => {
-            if (items) {
-              items.forEach(node => {
-                if (node.y !== undefined && node.y % 8 !== 0) {
-                  const newY = Math.round(node.y / 8) * 8;
-                  subGrid.update(node.el, { y: newY });
-                }
-              });
-            }
-          });
-          subGrid.on('added', (e, items) => {
-            if (items) {
-              items.forEach(node => {
-                if (node.y !== undefined && node.y % 8 !== 0) {
-                  const newY = Math.round(node.y / 8) * 8;
-                  subGrid.update(node.el, { y: newY });
-                }
-              });
-            }
-          });
           (subGrid as any).updateMinSize = updateMinSize;
           setTimeout(() => updateMinSize(), 50);
         }
