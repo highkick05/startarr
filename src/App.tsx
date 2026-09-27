@@ -211,7 +211,26 @@ export default function App() {
         try {
           const parsed = JSON.parse(settings.shortcuts_json);
           if (parsed && Array.isArray(parsed) && parsed.length > 0) {
-            setShortcuts(parsed.filter((p: any) => !!p).map((p: any) => ({
+            // Un-nest any containers or widgets that may have accidentally been dropped inside another container's children
+            const sanitized: any[] = [];
+            parsed.forEach((p: any) => {
+              if (!p) return;
+              if (p.type === 'container' && p.children && Array.isArray(p.children)) {
+                const validChildren: any[] = [];
+                p.children.forEach((c: any) => {
+                  if (c && (c.type === 'container' || c.type === 'widget' || c.widgetType === 'terminal' || c.type === 'category')) {
+                    sanitized.push(c); // Hoist accidental nested container back to top-level
+                  } else if (c) {
+                    validChildren.push(c);
+                  }
+                });
+                sanitized.push({ ...p, children: validChildren });
+              } else {
+                sanitized.push(p);
+              }
+            });
+
+            setShortcuts(sanitized.filter((p: any) => !!p).map((p: any) => ({
               ...p,
               w: p?.type === 'app' ? 1 : p?.w,
               // If an app shortcut was previously automatically assigned a black unstyled logo or a junk wiki icon, heal it to authentic colored logo:
@@ -302,6 +321,7 @@ export default function App() {
                el.classList.remove('subgrid-is-dragging');
                (el as HTMLElement).style.zIndex = '';
              });
+             document.body.classList.remove('container-is-dragging');
           }
         }
       });
@@ -438,7 +458,24 @@ export default function App() {
       try {
         const parsed = JSON.parse(saved);
         if (parsed && Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.filter((p: any) => !!p).map((p: any) => ({
+          const sanitized: any[] = [];
+          parsed.forEach((p: any) => {
+            if (!p) return;
+            if (p.type === 'container' && p.children && Array.isArray(p.children)) {
+              const validChildren: any[] = [];
+              p.children.forEach((c: any) => {
+                if (c && (c.type === 'container' || c.type === 'widget' || c.widgetType === 'terminal' || c.type === 'category')) {
+                  sanitized.push(c);
+                } else if (c) {
+                  validChildren.push(c);
+                }
+              });
+              sanitized.push({ ...p, children: validChildren });
+            } else {
+              sanitized.push(p);
+            }
+          });
+          return sanitized.filter((p: any) => !!p).map((p: any) => ({
             ...p,
             w: p?.type === 'app' ? 1 : p?.w,
             h: p?.type === 'app' ? 1 : p?.h
@@ -925,7 +962,7 @@ export default function App() {
       float: true,
       animate: true,
       disableResize: false,
-      acceptWidgets: true,
+      acceptWidgets: false, // Prevents dragged app shortcuts from popping out onto the dashboard
       removable: '.recycle-bin-zone',
       removeTimeout: 0,
       draggable: {
@@ -1027,6 +1064,15 @@ export default function App() {
     gridInstance.current.on('change', (e, items) => { handleGridChange(e, items); });
     gridInstance.current.on('added', handleGridChange);
     gridInstance.current.on('removed', handleRemovedEvent);
+
+    gridInstance.current.on('dragstart', (e: any, el: any) => {
+      if (el && (el.classList.contains('container-grid-item') || el.getAttribute('data-item-type') === 'container')) {
+        document.body.classList.add('container-is-dragging');
+      }
+    });
+    gridInstance.current.on('dragstop', () => {
+      document.body.classList.remove('container-is-dragging');
+    });
 
     const handleResize = () => {
       allowSave.current = false;
@@ -1283,8 +1329,9 @@ export default function App() {
       if (item.y !== undefined) opts.y = item.y;
 
       const wrapper = document.createElement('div');
-      wrapper.className = 'grid-stack-item terminal-widget-grid-item';
+      wrapper.className = 'grid-stack-item terminal-widget-grid-item widget-grid-item';
       wrapper.setAttribute('gs-id', item.id);
+      wrapper.setAttribute('data-item-type', 'widget');
 
       const mountContainer = document.createElement('div');
       mountContainer.className = 'grid-stack-item-content terminal-mount-point w-full h-full';
@@ -1356,8 +1403,15 @@ export default function App() {
 
     // Create DOM element manually
     const wrapper = document.createElement('div');
-    wrapper.className = 'grid-stack-item';
+    const typeClass = item.type === 'container'
+      ? 'container-grid-item'
+      : item.type === 'category'
+        ? 'category-grid-item'
+        : 'app-shortcut-grid-item';
+
+    wrapper.className = `grid-stack-item ${typeClass}`;
     wrapper.setAttribute('gs-id', item.id); // Explicitly bind ID for context menu!
+    wrapper.setAttribute('data-item-type', item.type || 'app');
     wrapper.innerHTML = htmlContent;
     
     // Append to grid container directly
@@ -1377,7 +1431,24 @@ export default function App() {
             cellHeight: getCellHeight(layoutSize),
             margin: 0,
             column: item.w || 4,
-            acceptWidgets: true,
+            acceptWidgets: (el: Element) => {
+              if (!el) return false;
+              // Never accept containers, categories, widgets, or any element that contains a subgrid
+              if (
+                el.classList.contains('container-grid-item') ||
+                el.classList.contains('terminal-widget-grid-item') ||
+                el.classList.contains('widget-grid-item') ||
+                el.classList.contains('category-grid-item') ||
+                el.getAttribute('data-item-type') === 'container' ||
+                el.getAttribute('data-item-type') === 'widget' ||
+                el.getAttribute('data-item-type') === 'category' ||
+                el.querySelector('.grid-stack') !== null
+              ) {
+                return false;
+              }
+              // Only accept app shortcuts
+              return el.classList.contains('app-shortcut-grid-item') || el.getAttribute('data-item-type') === 'app';
+            },
             dragOut: true,
             float: false,
             removable: '.recycle-bin-zone',
@@ -1930,6 +2001,9 @@ export default function App() {
         }
         .grid-stack-item.ui-draggable-dragging, .grid-stack-item.grid-stack-item-dragging {
           z-index: 99999 !important;
+        }
+        body.container-is-dragging .grid-stack-item .grid-stack {
+          pointer-events: none !important;
         }
       `}</style>
 
