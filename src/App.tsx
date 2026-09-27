@@ -230,7 +230,7 @@ export default function App() {
               }
             });
 
-            setShortcuts(sanitized.filter((p: any) => !!p).map((p: any) => ({
+            const sanitizedClean = sanitized.filter((p: any) => !!p).map((p: any) => ({
               ...p,
               w: p?.type === 'app' ? 1 : p?.w,
               // If an app shortcut was previously automatically assigned a black unstyled logo or a junk wiki icon, heal it to authentic colored logo:
@@ -241,7 +241,11 @@ export default function App() {
               // We assume old apps have h:1. Old containers have h:2 or 3.
               // New apps will have h:8.
               h: (p.type === 'app' && p.h < 8) ? 8 : (p.type === 'category' && p.h < 4 ? 4 : (p.type === 'container' && p.h < 8 ? p.h * 8 : ((p.type === 'widget' || p.widgetType === 'terminal') && (!p.h || p.h < 12) ? 24 : p.h)))
-            })));
+            }));
+            try {
+              localStorage.setItem('shortcuts', JSON.stringify(sanitizedClean));
+            } catch (e) {}
+            setShortcuts(sanitizedClean);
             // Also need to re-render grid since API loaded!
 
             // Background upgrade: If any app shortcut is still using a low-quality gstatic favicon, globe, monochrome, or junk wiki icon,
@@ -337,7 +341,11 @@ export default function App() {
           return rest as ShortcutItem;
         });
       };
-      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(cleanForStorage(updated)) }) }).catch(console.error);
+      const cleanUpdated = cleanForStorage(updated);
+      try {
+        localStorage.setItem('shortcuts', JSON.stringify(cleanUpdated));
+      } catch (e) {}
+      fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(cleanUpdated) }) }).catch(console.error);
       return updated;
     });
     
@@ -456,7 +464,7 @@ export default function App() {
           return sanitized.filter((p: any) => !!p).map((p: any) => ({
             ...p,
             w: p?.type === 'app' ? 1 : p?.w,
-            h: p?.type === 'app' ? 1 : p?.h
+            h: (p.type === 'app' && (!p.h || p.h < 8)) ? 8 : (p.type === 'category' && (!p.h || p.h < 4) ? 4 : (p.type === 'container' && (!p.h || p.h < 8) ? (p.h ? p.h * 8 : 12) : ((p.type === 'widget' || p.widgetType === 'terminal') && (!p.h || p.h < 12) ? 24 : p.h)))
           }));
         }
       } catch (e) {
@@ -869,6 +877,9 @@ export default function App() {
               });
             };
             const updated = removeDeep(prev);
+            try {
+              localStorage.setItem('shortcuts', JSON.stringify(updated));
+            } catch (e) {}
             fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
             
             // Trigger a resize event to ensure layout recalculations (instead of full reload)
@@ -916,7 +927,6 @@ export default function App() {
     isInitializing.current = true;
     
     currentCols.current = getColumns(layoutSize);
-    const maxCols = getMaxColumns(layoutSize);
     gridContainerRef.current.innerHTML = '';
     
     const calculateMinRows = () => {
@@ -928,7 +938,7 @@ export default function App() {
 
     gridInstance.current = GridStack.init({
       disableOneColumnMode: true,
-      column: maxCols,
+      column: currentCols.current,
       cellHeight: getCellHeight(layoutSize),
       margin: 4,
       minRow: calculateMinRows(),
@@ -949,18 +959,8 @@ export default function App() {
     setTerminalMounts(new Map());
     shortcuts.forEach(item => addWidgetToGrid(item));
 
-    if (maxCols !== currentCols.current) {
-      gridInstance.current.column(currentCols.current, 'none');
-    }
-    const needsArrange = currentCols.current !== maxCols || shortcuts.some(s => (s.x || 0) + (s.w || 1) > currentCols.current || (s.w || 1) > currentCols.current || (s.y || 0) < 0);
-    if (needsArrange) {
-      setTimeout(() => {
-        autoArrangeDashboardRef.current?.();
-      }, 100);
-    }
-
     isInitializing.current = false;
-    setTimeout(() => { allowSave.current = true; }, 2000);
+    setTimeout(() => { allowSave.current = true; }, 200);
 
     // Now listen to events
     
@@ -1060,6 +1060,12 @@ export default function App() {
       if (colsChanged) {
         currentCols.current = newCols;
         gridInstance.current.column(newCols, 'none');
+        // Keep items within boundaries without rearranging entire dashboard
+        gridInstance.current.engine.nodes.forEach((n: any) => {
+          if ((n.x || 0) + (n.w || 1) > newCols) {
+            gridInstance.current?.update(n.el, { x: Math.max(0, newCols - (n.w || 1)) });
+          }
+        });
       }
       
       const newCellHeight = getCellHeight(layoutSize);
@@ -1067,20 +1073,11 @@ export default function App() {
       
       // Also update any subgrids
       gridInstance.current.engine.nodes.forEach(node => {
-        if (node.subGrid) {
-          node.subGrid.cellHeight(newCellHeight);
+        const sub = node.subGrid || node.el?.querySelector('.grid-stack')?.gridstack;
+        if (sub) {
+          sub.cellHeight(newCellHeight);
         }
       });
-
-      // Always auto-arrange when columns change or any items overflow the new screen width
-      const hasOverflow = gridInstance.current.engine.nodes.some(
-        (n: any) => (n.x || 0) + (n.w || 1) > newCols || (n.w || 1) > newCols
-      );
-      if (colsChanged || hasOverflow) {
-        setTimeout(() => {
-          autoArrangeDashboardRef.current?.();
-        }, 50);
-      }
     };
 
     let resizeTimer: NodeJS.Timeout;
@@ -1088,7 +1085,7 @@ export default function App() {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
         handleResize();
-        setTimeout(() => { allowSave.current = true; }, 1000);
+        setTimeout(() => { allowSave.current = true; }, 300);
       }, 150);
     };
 
@@ -1186,8 +1183,9 @@ export default function App() {
         const rawId = node.id || node.el?.getAttribute("gs-id");
         const id = rawId ? String(rawId) : undefined;
         const res: any = { id, x: node.x, y: node.y, w: node.w, h: node.h };
-        if (node.subGrid) {
-          res.children = extractNodes(node.subGrid);
+        const subGridInstance = node.subGrid || node.el?.querySelector('.grid-stack')?.gridstack;
+        if (subGridInstance) {
+          res.children = extractNodes(subGridInstance);
         }
         return res;
       });
@@ -1253,6 +1251,9 @@ export default function App() {
       // itemRegistry.current.clear(); removed to preserve detached items for the recycle bin
       refreshRegistry(updated);
 
+      try {
+        localStorage.setItem('shortcuts', JSON.stringify(updated));
+      } catch (e) {}
       fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
       return updated;
     });
@@ -1392,6 +1393,10 @@ export default function App() {
     wrapper.className = `grid-stack-item ${typeClass}`;
     wrapper.setAttribute('gs-id', item.id); // Explicitly bind ID for context menu!
     wrapper.setAttribute('data-item-type', item.type || 'app');
+    if (item.x !== undefined) wrapper.setAttribute('gs-x', String(item.x));
+    if (item.y !== undefined) wrapper.setAttribute('gs-y', String(item.y));
+    if (item.w !== undefined) wrapper.setAttribute('gs-w', String(item.w));
+    if (item.h !== undefined) wrapper.setAttribute('gs-h', String(item.h));
     wrapper.innerHTML = htmlContent;
     
     // Append to grid container directly
@@ -1437,6 +1442,9 @@ export default function App() {
             draggable: { appendTo: 'body', cancel: '.no-drag' }
           } as any);
           
+          if ((el as any).gridstackNode) {
+            (el as any).gridstackNode.subGrid = subGrid;
+          }
           (subGrid as any)._autoColumn = true;
           
           if (item.children) {
@@ -1489,15 +1497,23 @@ export default function App() {
                 (parentContainer as HTMLElement).style.zIndex = '';
               }
             }
+            debouncedSaveGridState(50);
           });
-          subGrid.on('added', () => updateMinSize());
+          subGrid.on('added', () => {
+            updateMinSize();
+            debouncedSaveGridState(100);
+          });
           subGrid.on('removed', (e, items) => {
-             updateMinSize();
-             if (items) {
-               handleRemovedEventRef.current?.(e, items);
-             }
+            updateMinSize();
+            if (items) {
+              handleRemovedEventRef.current?.(e, items);
+            }
+            debouncedSaveGridState(100);
           });
-          subGrid.on('change', () => updateMinSize());
+          subGrid.on('change', () => {
+            updateMinSize();
+            debouncedSaveGridState(100);
+          });
           (subGrid as any).updateMinSize = updateMinSize;
           setTimeout(() => updateMinSize(), 50);
         }
@@ -1523,6 +1539,9 @@ export default function App() {
 
     setShortcuts(prev => {
       const updated = [...prev, newItem];
+      try {
+        localStorage.setItem('shortcuts', JSON.stringify(updated));
+      } catch (e) {}
       fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
       return updated;
     });
@@ -1580,6 +1599,9 @@ export default function App() {
     
     setShortcuts(prev => {
       const updated = [...prev, newItem];
+      try {
+        localStorage.setItem('shortcuts', JSON.stringify(updated));
+      } catch (e) {}
       fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
       return updated;
     });
@@ -1616,6 +1638,9 @@ export default function App() {
 
     setShortcuts(prev => {
       const updated = [...prev, newItem];
+      try {
+        localStorage.setItem('shortcuts', JSON.stringify(updated));
+      } catch (e) {}
       fetch('/api/settings', {
         method: 'PUT',
         keepalive: true,
@@ -1914,6 +1939,9 @@ export default function App() {
         // Instantly add it
         setShortcuts(prev => {
           const updated = [...prev, newItem];
+          try {
+            localStorage.setItem('shortcuts', JSON.stringify(updated));
+          } catch (e) {}
           fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
           return updated;
         });
@@ -2125,6 +2153,9 @@ export default function App() {
                         // Instantly add it
                         setShortcuts(prev => {
                           const updated = [...prev, newItem];
+                          try {
+                            localStorage.setItem('shortcuts', JSON.stringify(updated));
+                          } catch (e) {}
                           fetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
                           return updated;
                         });
