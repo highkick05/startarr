@@ -632,11 +632,6 @@ export default function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [isMouseNearBottom, setIsMouseNearBottom] = useState(false);
 
-  const [currentTime, setCurrentTime] = useState(new Date());
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   const [backgrounds, setBackgrounds] = useState<any[]>([]);
   const [activeBackground, setActiveBackground] = useState('/default-background.jpg');
@@ -2019,13 +2014,6 @@ export default function App() {
       <div className={`absolute inset-0 z-[-1] ${activeBackground && activeBackground !== 'none' ? '' : 'bg-neutral-950'}`} />
 
       
-      {/* Floating 12-hour Time & Date in top right */}
-      <div className="absolute top-3.5 right-6 z-30 pointer-events-none flex items-center space-x-2.5 text-sm font-medium text-neutral-200/90 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] select-none">
-        <span>{currentTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
-        <span className="text-neutral-400 opacity-60">•</span>
-        <span>{currentTime.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}</span>
-      </div>
-
       {/* Right Edge Trigger Sensor for sliding out Settings on drag/hover */}
       <div 
         className="fixed top-0 right-0 w-3 h-full z-30 pointer-events-auto"
@@ -2037,8 +2025,8 @@ export default function App() {
         }}
       />
 
-      {/* Main Content (with top padding to avoid toolbar clipping) */}
-      <main className="w-full mx-auto px-4 sm:px-6 lg:px-8 pt-12 sm:pt-14 pb-28 min-h-screen relative z-10">
+      {/* Main Content */}
+      <main className="w-full mx-auto px-4 sm:px-6 lg:px-8 pt-0 pb-28 min-h-screen relative z-10">
         <div className="grid-stack" ref={gridContainerRef}></div>
 
         {/* Recycle Bin Drop Zone / Button */}
