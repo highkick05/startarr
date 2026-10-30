@@ -14,7 +14,7 @@ import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "super_secret_jwt_key_12345";
 
 app.use(express.json({ limit: '250mb' }));

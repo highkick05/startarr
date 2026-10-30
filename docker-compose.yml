@@ -1,24 +1,19 @@
 version: '3.8'
-
+ 
 services:
-  dashboard:
+  startarr:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: dashboard-app
-    network_mode: "host"
+    container_name: startarr
     ports:
-      - "3000:3000"
+      - "3055:3000"
     volumes:
-      # Mount the local directory to /app in the container for live-reloading
-      - .:/app
-      # Exclude the host's node_modules from overriding the container's node_modules
-      - /app/node_modules
-      # Persist the SQLite DB and custom images across rebuilds
-      - app-data:/app/uploads
+      # Persist SQLite database and uploaded backgrounds across restarts and container rebuilds
+      - ./uploads:/app/uploads
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:-change_this_to_a_long_random_secret_key}
     restart: unless-stopped
 
-volumes:
-  app-data:

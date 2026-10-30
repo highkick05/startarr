@@ -1,18 +1,29 @@
-FROM node:20-alpine
+FROM node:20-bookworm-slim
 
 WORKDIR /app
 
-# Copy package management files
-COPY package.json ./
+# Install native compilation dependencies for sqlite3 and ssh2
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
+# Install packages
+COPY package*.json ./
 RUN npm install
 
-# Copy application source code
+# Copy source and build
 COPY . .
+RUN npm run build
 
-# Expose the Vite port
+# Ensure uploads directory exists
+RUN mkdir -p /app/uploads
+
 EXPOSE 3000
 
-# Start the application
-CMD ["npm", "run", "dev"]
+ENV NODE_ENV=production
+ENV PORT=3000
+
+CMD ["node", "dist/server.cjs"]
+
