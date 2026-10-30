@@ -1067,9 +1067,23 @@ wss.on("connection", (ws: WebSocket, req: any) => {
     }
   };
 
+  // Heartbeat ping loop to prevent reverse proxy (Nginx Proxy Manager / Cloudflare) 60s idle timeout
+  const heartbeatTimer = setInterval(() => {
+    if (ws.readyState === WebSocket.OPEN) {
+      send({ type: "heartbeat", time: Date.now() });
+    } else {
+      clearInterval(heartbeatTimer);
+    }
+  }, 15000);
+
   ws.on("message", async (msgStr: string) => {
     try {
       const msg = JSON.parse(msgStr.toString());
+      if (msg.action === "ping") {
+        send({ type: "pong", time: Date.now() });
+        return;
+      }
+
       if (msg.action === "connect") {
         const { host, port = 22, username, password, privateKey, passphrase, term = "xterm-256color", cols = 80, rows = 24 } = msg;
 
@@ -1128,9 +1142,10 @@ wss.on("connection", (ws: WebSocket, req: any) => {
           host,
           port: Number(port) || 22,
           username,
-          readyTimeout: 20000,
+          readyTimeout: 30000,
           keepaliveInterval: 10000,
-          keepaliveCountMax: 3
+          // Allow up to 60 missed keepalives (10 mins) during heavy CPU/disk I/O operations (like apt install docker-ce / update-initramfs)
+          keepaliveCountMax: 60
         };
 
         if (privateKey && String(privateKey).trim()) {
@@ -1168,6 +1183,7 @@ wss.on("connection", (ws: WebSocket, req: any) => {
   });
 
   ws.on("close", () => {
+    clearInterval(heartbeatTimer);
     if (sshClient) {
       try { sshClient.end(); } catch (e) {}
       sshClient = null;

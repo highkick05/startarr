@@ -100,6 +100,18 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
   // Terminals and WebSockets map per tab
   const terminalInstances = useRef<Map<string, { term: Terminal; fitAddon: FitAddon; ws: WebSocket | null }>>(new Map());
   const terminalContainers = useRef<Map<string, HTMLDivElement>>(new Map());
+  const tabConnectionDetails = useRef<Map<string, {
+    host: string;
+    port: number;
+    username: string;
+    password?: string;
+    privateKey?: string;
+    passphrase?: string;
+    userExplicitDisconnect?: boolean;
+  }>>(new Map());
+  const pingIntervals = useRef<Map<string, any>>(new Map());
+  const reconnectTimers = useRef<Map<string, any>>(new Map());
+  const reconnectAttempts = useRef<Map<string, number>>(new Map());
   const resizeObserver = useRef<ResizeObserver | null>(null);
   const widgetContainerRef = useRef<HTMLDivElement>(null);
 
@@ -166,9 +178,24 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
     password?: string;
     privateKey?: string;
     passphrase?: string;
-  }) => {
+  }, isReconnect = false) => {
     const container = terminalContainers.current.get(tabId);
     if (!container) return;
+
+    // Save connection details for reliable auto-reconnects
+    tabConnectionDetails.current.set(tabId, { ...conn, userExplicitDisconnect: false });
+
+    // Clear prior ping and reconnect timers for this tab
+    const oldPing = pingIntervals.current.get(tabId);
+    if (oldPing) {
+      clearInterval(oldPing);
+      pingIntervals.current.delete(tabId);
+    }
+    const oldReconnect = reconnectTimers.current.get(tabId);
+    if (oldReconnect) {
+      clearTimeout(oldReconnect);
+      reconnectTimers.current.delete(tabId);
+    }
 
     // Close any existing connection for this tab
     const existing = terminalInstances.current.get(tabId);
@@ -194,8 +221,13 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
     if (existing) {
       term = existing.term;
       fitAddon = existing.fitAddon;
-      term.clear();
-      term.reset();
+      if (!isReconnect) {
+        term.clear();
+        term.reset();
+        term.writeln(`\x1b[36mConnecting to \x1b[1m${conn.username}@${conn.host}:${conn.port}\x1b[0;36m...\x1b[0m\r\n`);
+      } else {
+        term.writeln(`\r\n\x1b[33m⚡ Reconnecting to \x1b[1m${conn.username}@${conn.host}:${conn.port}\x1b[0;33m...\x1b[0m\r\n`);
+      }
     } else {
       term = new Terminal({
         cursorBlink: true,
@@ -232,9 +264,8 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
       term.loadAddon(fitAddon);
       term.open(container);
       try { fitAddon.fit(); } catch {}
+      term.writeln(`\x1b[36mConnecting to \x1b[1m${conn.username}@${conn.host}:${conn.port}\x1b[0;36m...\x1b[0m\r\n`);
     }
-
-    term.writeln(`\x1b[36mConnecting to \x1b[1m${conn.username}@${conn.host}:${conn.port}\x1b[0;36m...\x1b[0m\r\n`);
 
     // Determine WS protocol
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -244,6 +275,14 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
     terminalInstances.current.set(tabId, { term, fitAddon, ws });
 
     ws.onopen = () => {
+      // Periodic ping every 15 seconds to prevent reverse proxy (Nginx Proxy Manager / Cloudflare) idle timeout
+      const pingId = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ action: 'ping' }));
+        }
+      }, 15000);
+      pingIntervals.current.set(tabId, pingId);
+
       ws.send(JSON.stringify({
         action: 'connect',
         host: conn.host,
@@ -263,11 +302,22 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
         const msg = JSON.parse(event.data);
         if (msg.type === 'data') {
           term.write(msg.data);
+        } else if (msg.type === 'pong' || msg.type === 'heartbeat') {
+          // Heartbeat acknowledged, keepalive active
         } else if (msg.type === 'status') {
           if (msg.status === 'connected') {
+            reconnectAttempts.current.set(tabId, 0);
+            clearTimeout(reconnectTimers.current.get(tabId));
             setTabs(prev => prev.map(t => t.id === tabId ? { ...t, status: 'connected' } : t));
             term.writeln(`\x1b[32m✔ ${msg.message}\x1b[0m\r\n`);
           } else if (msg.status === 'closed' || msg.status === 'disconnected') {
+            const isIntentional = msg.message && (msg.message.includes('closed by remote host') || msg.message.includes('Disconnected by user'));
+            if (isIntentional) {
+              const details = tabConnectionDetails.current.get(tabId);
+              if (details) details.userExplicitDisconnect = true;
+              clearTimeout(reconnectTimers.current.get(tabId));
+              reconnectAttempts.current.set(tabId, 0);
+            }
             setTabs(prev => prev.map(t => t.id === tabId ? { ...t, status: 'disconnected' } : t));
             term.writeln(`\x1b[33m${msg.message}\x1b[0m`);
           }
@@ -281,12 +331,35 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
     };
 
     ws.onerror = () => {
-      setTabs(prev => prev.map(t => t.id === tabId ? { ...t, status: 'error', errorMessage: 'WebSocket connection failed' } : t));
-      term.writeln(`\r\n\x1b[31m✖ WebSocket network error.\x1b[0m\r\n`);
+      setTabs(prev => prev.map(t => t.id === tabId ? { ...t, status: 'error', errorMessage: 'WebSocket network connection interrupted' } : t));
     };
 
     ws.onclose = () => {
-      setTabs(prev => prev.map(t => t.id === tabId && t.status !== 'error' ? { ...t, status: 'disconnected' } : t));
+      // Clear ping interval
+      const pingId = pingIntervals.current.get(tabId);
+      if (pingId) {
+        clearInterval(pingId);
+        pingIntervals.current.delete(tabId);
+      }
+
+      const details = tabConnectionDetails.current.get(tabId);
+      if (details && details.host && !details.userExplicitDisconnect) {
+        // Auto-reconnect automatically with backoff
+        const attempts = (reconnectAttempts.current.get(tabId) || 0) + 1;
+        reconnectAttempts.current.set(tabId, attempts);
+        const delay = Math.min(2000 * Math.min(attempts, 4), 10000);
+
+        setTabs(prev => prev.map(t => t.id === tabId ? { ...t, status: 'disconnected' } : t));
+        term.writeln(`\r\n\x1b[33m[Connection dropped. Reconnecting automatically in ${delay / 1000}s...] (Attempt ${attempts})\x1b[0m\r\n`);
+
+        clearTimeout(reconnectTimers.current.get(tabId));
+        const timerId = setTimeout(() => {
+          connectTab(tabId, details, true);
+        }, delay);
+        reconnectTimers.current.set(tabId, timerId);
+      } else {
+        setTabs(prev => prev.map(t => t.id === tabId && t.status !== 'error' ? { ...t, status: 'disconnected' } : t));
+      }
     };
 
     term.onData((data) => {
@@ -344,11 +417,16 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      pingIntervals.current.forEach(id => clearInterval(id));
+      pingIntervals.current.clear();
+      reconnectTimers.current.forEach(id => clearTimeout(id));
+      reconnectTimers.current.clear();
       terminalInstances.current.forEach(({ term, ws }) => {
         try { ws?.close(); } catch {}
         try { term.dispose(); } catch {}
       });
       terminalInstances.current.clear();
+      tabConnectionDetails.current.clear();
     };
   }, []);
 
@@ -378,6 +456,19 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
   // Close tab
   const closeTab = (tabId: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
+    const oldPing = pingIntervals.current.get(tabId);
+    if (oldPing) {
+      clearInterval(oldPing);
+      pingIntervals.current.delete(tabId);
+    }
+    const oldReconnect = reconnectTimers.current.get(tabId);
+    if (oldReconnect) {
+      clearTimeout(oldReconnect);
+      reconnectTimers.current.delete(tabId);
+    }
+    tabConnectionDetails.current.delete(tabId);
+    reconnectAttempts.current.delete(tabId);
+
     const inst = terminalInstances.current.get(tabId);
     if (inst) {
       try { inst.ws?.close(); } catch {}
@@ -619,7 +710,10 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
           {activeTab && activeTab.host && (
             <button
               onClick={() => {
-                if (activeTab.host) {
+                const creds = tabConnectionDetails.current.get(activeTab.id);
+                if (creds && creds.host) {
+                  connectTab(activeTab.id, creds, true);
+                } else if (activeTab.host) {
                   connectTab(activeTab.id, {
                     host: activeTab.host,
                     port: activeTab.port || 22,
@@ -627,7 +721,7 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
                     password: activeTab.password,
                     privateKey: activeTab.privateKey,
                     passphrase: activeTab.passphrase
-                  });
+                  }, true);
                 }
               }}
               className="p-1 rounded-lg text-neutral-400 hover:text-emerald-400 hover:bg-neutral-800/50 transition-colors"
@@ -776,74 +870,80 @@ export const TerminalWidget: React.FC<TerminalWidgetProps> = ({
           />
         ))}
 
-        {/* Disconnected state placeholder */}
-        {activeTab && activeTab.status === 'disconnected' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2.5 select-none bg-neutral-950/40">
-            <div className="w-7 h-7 rounded-lg bg-neutral-800/80 border border-neutral-700/60 flex items-center justify-center text-neutral-400 mb-1 shadow-sm">
-              <TerminalIcon size={14} />
+        {/* Initial Empty State - ONLY shown if tab has no host configured yet */}
+        {activeTab && (!activeTab.host || activeTab.host.trim() === '') && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2.5 select-none bg-neutral-950/60 backdrop-blur-sm z-10">
+            <div className="w-8 h-8 rounded-xl bg-neutral-800/80 border border-neutral-700/60 flex items-center justify-center text-neutral-400 mb-1.5 shadow-sm">
+              <TerminalIcon size={16} />
             </div>
-            <p className="text-xs font-medium text-neutral-200">Terminal Disconnected</p>
-            <p className="text-[10px] text-neutral-400 mb-2 truncate max-w-[200px]">
-              {activeTab.host ? `${activeTab.username}@${activeTab.host}` : 'Configure SSH credentials to connect'}
+            <p className="text-xs font-semibold text-neutral-200">Terminal Ready</p>
+            <p className="text-[10px] text-neutral-400 mb-2.5 truncate max-w-[220px]">
+              Configure SSH credentials or pick a saved profile to connect
             </p>
             <button
               onClick={() => setShowConnectDialog(true)}
-              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg text-[11px] shadow-md shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-1"
+              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg text-xs shadow-md shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-1.5"
             >
-              <Lock size={10} />
+              <Lock size={11} />
               <span>Connection Settings</span>
             </button>
           </div>
         )}
 
-        {/* Failed state placeholder */}
-        {activeTab && activeTab.status === 'error' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2.5 select-none bg-neutral-950/70">
-            <div className="w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 mb-1 shadow-sm">
-              <X size={14} />
-            </div>
-            <p className="text-xs font-semibold text-rose-300">Connection Failed</p>
-            <p className="text-[10px] text-neutral-400 mb-2 px-3 line-clamp-2 max-w-[240px]">
-              {activeTab.errorMessage || 'Unable to establish SSH tunnel'}
-            </p>
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => {
-                  if (activeTab.host) {
-                    connectTab(activeTab.id, {
-                      host: activeTab.host,
-                      port: activeTab.port || 22,
-                      username: activeTab.username,
-                      password: activeTab.password,
-                      privateKey: activeTab.privateKey,
-                      passphrase: activeTab.passphrase
-                    });
-                  } else {
-                    setShowConnectDialog(true);
-                  }
-                }}
-                className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-medium rounded text-[11px] transition-colors flex items-center gap-1"
-              >
-                <RefreshCw size={10} />
-                <span>Retry</span>
-              </button>
-              <button
-                onClick={() => setShowConnectDialog(true)}
-                className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded text-[11px] shadow-sm transition-all active:scale-95 flex items-center gap-1"
-              >
-                <Sliders size={10} />
-                <span>Settings</span>
-              </button>
-            </div>
+        {/* Floating Non-Intrusive Status Badges (NEVER obscures terminal output!) */}
+        {activeTab && activeTab.host && activeTab.status === 'connecting' && (
+          <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-neutral-950/80 backdrop-blur-md border border-amber-500/40 text-[11px] text-amber-300 shadow-xl pointer-events-auto">
+            <RefreshCw size={11} className="animate-spin text-amber-400 shrink-0" />
+            <span className="font-mono text-[10px] truncate max-w-[140px]">{activeTab.username}@{activeTab.host}</span>
+            <span className="text-[10px] text-neutral-400">Connecting...</span>
           </div>
         )}
 
-        {/* Connecting state spinner */}
-        {activeTab && activeTab.status === 'connecting' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2.5 select-none bg-neutral-950/60 z-10">
-            <RefreshCw size={16} className="animate-spin text-blue-400 mb-1.5" />
-            <p className="text-xs font-medium text-neutral-200">Connecting to {activeTab.host || 'host'}...</p>
-            <p className="text-[10px] text-neutral-400 mt-0.5">Authenticating session</p>
+        {activeTab && activeTab.host && activeTab.status === 'disconnected' && (
+          <div className="absolute top-2 right-2 z-20 flex items-center gap-2 px-2.5 py-1 rounded-full bg-neutral-950/85 backdrop-blur-md border border-amber-600/50 text-[11px] text-neutral-200 shadow-xl pointer-events-auto">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+            <span className="text-amber-300 text-[11px] font-medium">Reconnecting...</span>
+            <button
+              onClick={() => {
+                const creds = tabConnectionDetails.current.get(activeTab.id);
+                if (creds && creds.host) {
+                  connectTab(activeTab.id, creds, true);
+                } else {
+                  setShowConnectDialog(true);
+                }
+              }}
+              className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[10px] font-medium transition-colors"
+            >
+              Reconnect Now
+            </button>
+          </div>
+        )}
+
+        {activeTab && activeTab.host && activeTab.status === 'error' && (
+          <div className="absolute top-2 right-2 z-20 flex items-center gap-2 px-2.5 py-1 rounded-full bg-neutral-950/85 backdrop-blur-md border border-rose-600/60 text-[11px] text-neutral-200 shadow-xl pointer-events-auto">
+            <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+            <span className="text-rose-300 text-[11px] font-medium truncate max-w-[130px]">
+              {activeTab.errorMessage || 'Connection failed'}
+            </span>
+            <button
+              onClick={() => {
+                const creds = tabConnectionDetails.current.get(activeTab.id);
+                if (creds && creds.host) {
+                  connectTab(activeTab.id, creds, true);
+                } else {
+                  setShowConnectDialog(true);
+                }
+              }}
+              className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-white rounded text-[10px] font-medium transition-colors"
+            >
+              Retry
+            </button>
+            <button
+              onClick={() => setShowConnectDialog(true)}
+              className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[10px] font-medium transition-colors"
+            >
+              Settings
+            </button>
           </div>
         )}
       </div>
