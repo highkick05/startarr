@@ -5,5 +5,12 @@ coverage/
 .DS_Store
 *.log
 *.db
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+uploads/
+data/
+backups/
 .env*
 !.env.example
+

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { GridStack } from 'gridstack';
 import 'gridstack/dist/gridstack.min.css';
-import { Plus, X, Link2, Loader2, LayoutGrid, Search, Globe, Settings, Trash2, Image as ImageIcon, Video as VideoIcon, Upload, Trash, LogOut, User, ArrowRight, Sparkles, Check, RefreshCw, Terminal as TerminalIcon, Sliders } from 'lucide-react';
+import { Plus, X, Link2, Loader2, LayoutGrid, Search, Globe, Settings, Trash2, Image as ImageIcon, Video as VideoIcon, Upload, Trash, LogOut, User, ArrowRight, Sparkles, Check, RefreshCw, Terminal as TerminalIcon, Sliders, Download, FileUp, AlertCircle, HardDrive } from 'lucide-react';
 import { ShortcutItem } from './types';
 import { AuthContext } from './Auth.tsx';
 import { popularApps } from './data';
@@ -357,7 +357,7 @@ export default function App() {
       try {
         localStorage.setItem('shortcuts', JSON.stringify(cleanUpdated));
       } catch (e) {}
-      apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(cleanUpdated) }) }).catch(console.error);
+      saveSettingsToDb({ shortcuts_json: JSON.stringify(cleanUpdated) });
       return updated;
     });
     
@@ -449,6 +449,37 @@ export default function App() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const saveStatusTimeoutRef = useRef<any>(null);
+  const [backupRestoring, setBackupRestoring] = useState(false);
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
+
+  const saveSettingsToDb = async (partialSettings: Record<string, any>, retries = 3): Promise<boolean> => {
+    setSaveStatus('saving');
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const res = await apiFetch('/api/settings', {
+          method: 'PUT',
+          keepalive: true,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(partialSettings)
+        });
+        if (res.ok) {
+          setSaveStatus('saved');
+          if (saveStatusTimeoutRef.current) clearTimeout(saveStatusTimeoutRef.current);
+          saveStatusTimeoutRef.current = setTimeout(() => setSaveStatus('idle'), 2500);
+          return true;
+        }
+      } catch (e) {
+        console.warn(`[Settings] Save attempt ${attempt} failed:`, e);
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, attempt * 250));
+        }
+      }
+    }
+    setSaveStatus('error');
+    return false;
+  };
 
   const [shortcuts, setShortcuts] = useState<ShortcutItem[]>(() => {
     const saved = localStorage.getItem('shortcuts');
@@ -682,15 +713,13 @@ export default function App() {
     localStorage.setItem('uiOpacity', String(uiOpacity));
     localStorage.setItem('uiBlur', String(uiBlur));
     if (dataLoaded) {
-      apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          active_background: activeBackground,
-          tint_color: tintColor,
-          tint_opacity: tintOpacity,
-          ui_opacity: uiOpacity,
-          ui_blur: uiBlur
-        })
-      }).catch(console.error);
+      saveSettingsToDb({
+        active_background: activeBackground,
+        tint_color: tintColor,
+        tint_opacity: tintOpacity,
+        ui_opacity: uiOpacity,
+        ui_blur: uiBlur
+      });
     }
   }, [activeBackground, tintColor, tintOpacity, uiOpacity, uiBlur, dataLoaded]);
 
@@ -891,7 +920,7 @@ export default function App() {
             try {
               localStorage.setItem('shortcuts', JSON.stringify(updated));
             } catch (e) {}
-            apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+            saveSettingsToDb({ shortcuts_json: JSON.stringify(updated) });
             
             // Trigger a resize event to ensure layout recalculations (instead of full reload)
             setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
@@ -913,7 +942,7 @@ export default function App() {
   useEffect(() => {
     if (!dataLoaded) return;
     const timer = setTimeout(() => {
-      apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recycle_bin_json: JSON.stringify(recycleBin) }) }).catch(console.error);
+      saveSettingsToDb({ recycle_bin_json: JSON.stringify(recycleBin) });
     }, 500);
     return () => clearTimeout(timer);
   }, [recycleBin, dataLoaded]);
@@ -923,9 +952,7 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('layoutSize', layoutSize);
     if (dataLoaded) {
-      apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ layout_size: layoutSize })
-      }).catch(console.error);
+      saveSettingsToDb({ layout_size: layoutSize });
     }
   }, [layoutSize, dataLoaded]);
 
@@ -1291,12 +1318,7 @@ export default function App() {
       localStorage.setItem('shortcuts', JSON.stringify(updated));
     } catch (e) {}
 
-    apiFetch('/api/settings', {
-      method: 'PUT',
-      keepalive: true,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) })
-    }).catch(console.error);
+    saveSettingsToDb({ shortcuts_json: JSON.stringify(updated) });
 
     setShortcuts(updated);
   };
@@ -1591,7 +1613,7 @@ export default function App() {
       try {
         localStorage.setItem('shortcuts', JSON.stringify(updated));
       } catch (e) {}
-      apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+      saveSettingsToDb({ shortcuts_json: JSON.stringify(updated) });
       return updated;
     });
 
@@ -1650,7 +1672,7 @@ export default function App() {
       try {
         localStorage.setItem('shortcuts', JSON.stringify(updated));
       } catch (e) {}
-      apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+      saveSettingsToDb({ shortcuts_json: JSON.stringify(updated) });
       return updated;
     });
 
@@ -1689,12 +1711,7 @@ export default function App() {
       try {
         localStorage.setItem('shortcuts', JSON.stringify(updated));
       } catch (e) {}
-      apiFetch('/api/settings', {
-        method: 'PUT',
-        keepalive: true,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) })
-      }).catch(console.error);
+      saveSettingsToDb({ shortcuts_json: JSON.stringify(updated) });
       return updated;
     });
 
@@ -1990,7 +2007,7 @@ export default function App() {
           try {
             localStorage.setItem('shortcuts', JSON.stringify(updated));
           } catch (e) {}
-          apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+          saveSettingsToDb({ shortcuts_json: JSON.stringify(updated) });
           return updated;
         });
         addWidgetToGrid(newItem);
@@ -2088,7 +2105,29 @@ export default function App() {
       {/* Dynamic Main BG */}
       <div className={`absolute inset-0 z-[-1] ${activeBackground && activeBackground !== 'none' ? '' : 'bg-neutral-950'}`} />
 
-      
+      {/* Live Save Status Indicator */}
+      <div className="fixed top-4 right-4 z-40 pointer-events-none transition-all duration-300">
+        {saveStatus === 'saving' && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-neutral-900/90 backdrop-blur border border-neutral-700/80 text-neutral-300 text-xs shadow-2xl animate-in fade-in duration-200">
+            <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+            <span className="font-medium">Saving...</span>
+          </div>
+        )}
+        {saveStatus === 'saved' && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-neutral-900/90 backdrop-blur border border-emerald-500/50 text-emerald-400 text-xs shadow-2xl animate-in fade-in duration-200">
+            <Check size={14} className="text-emerald-400" />
+            <span className="font-medium">Saved</span>
+          </div>
+        )}
+        {saveStatus === 'error' && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-950/90 backdrop-blur border border-red-500/60 text-red-300 text-xs shadow-2xl animate-in fade-in duration-200 pointer-events-auto">
+            <AlertCircle size={14} className="text-red-400" />
+            <span className="font-medium">Save failed</span>
+            <button onClick={() => saveGridState()} className="underline ml-1 font-semibold hover:text-white">Retry</button>
+          </div>
+        )}
+      </div>
+
       {/* Right Edge Trigger Sensor for sliding out Settings on drag/hover */}
       <div 
         className="fixed top-0 right-0 w-3 h-full z-30 pointer-events-auto"
@@ -2203,7 +2242,7 @@ export default function App() {
                           try {
                             localStorage.setItem('shortcuts', JSON.stringify(updated));
                           } catch (e) {}
-                          apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shortcuts_json: JSON.stringify(updated) }) }).catch(console.error);
+                          saveSettingsToDb({ shortcuts_json: JSON.stringify(updated) });
                           return updated;
                         });
                         addWidgetToGrid(newItem);
@@ -2415,7 +2454,7 @@ export default function App() {
                 onClick={() => {
                   const val = !showRecycleBin;
                   setShowRecycleBin(val);
-                  apiFetch('/api/settings', { method: 'PUT', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ show_recycle_bin: val }) }).catch(console.error);
+                  saveSettingsToDb({ show_recycle_bin: val });
                 }}
                 className={`w-11 h-6 rounded-full transition-colors relative ${showRecycleBin ? 'bg-emerald-500' : 'bg-neutral-700'}`}
               >
@@ -2630,6 +2669,94 @@ export default function App() {
                 <Plus size={14} />
                 <span>Add</span>
               </button>
+            </div>
+          </section>
+
+          {/* Data Backup & Recovery */}
+          <section className="pt-4 border-t border-neutral-800">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider">Backup & Data Recovery</h3>
+              <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-medium">WAL Mode</span>
+            </div>
+            <p className="text-xs text-neutral-500 mb-4">Export or restore your entire dashboard layout, shortcuts, widgets, and themes.</p>
+
+            {backupMessage && (
+              <div className="mb-3 p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300 flex items-center justify-between">
+                <span>{backupMessage}</span>
+                <button onClick={() => setBackupMessage(null)} className="text-neutral-400 hover:text-white ml-2">
+                  <X size={12} />
+                </button>
+              </div>
+            )}
+
+            <div className="space-y-2.5">
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await apiFetch('/api/backup/export');
+                    if (!res.ok) throw new Error('Export failed');
+                    const blob = await res.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `startarr-backup-${new Date().toISOString().slice(0, 10)}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                    setBackupMessage('Backup exported successfully!');
+                  } catch (e: any) {
+                    setBackupMessage('Export failed: ' + (e?.message || 'Unknown error'));
+                  }
+                }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-neutral-800/80 hover:bg-neutral-700/80 border border-neutral-700 text-neutral-200 text-xs font-semibold transition-all active:scale-[0.98]"
+              >
+                <Download size={14} className="text-blue-400" />
+                <span>Export Dashboard Backup (.json)</span>
+              </button>
+
+              <label className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-neutral-800/80 hover:bg-neutral-700/80 border border-neutral-700 text-neutral-200 text-xs font-semibold transition-all cursor-pointer active:scale-[0.98]">
+                <FileUp size={14} className="text-emerald-400" />
+                <span>{backupRestoring ? 'Restoring...' : 'Restore from Backup File'}</span>
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  className="hidden"
+                  disabled={backupRestoring}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setBackupRestoring(true);
+                    setBackupMessage('Restoring backup...');
+                    try {
+                      const text = await file.text();
+                      const json = JSON.parse(text);
+                      const res = await apiFetch('/api/backup/restore', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(json)
+                      });
+                      if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        throw new Error(err.error || 'Restore failed');
+                      }
+                      setBackupMessage('Dashboard restored successfully! Reloading...');
+                      setTimeout(() => {
+                        window.location.reload();
+                      }, 1000);
+                    } catch (err: any) {
+                      setBackupMessage('Restore error: ' + (err?.message || 'Invalid backup file'));
+                    } finally {
+                      setBackupRestoring(false);
+                      e.target.value = '';
+                    }
+                  }}
+                />
+              </label>
+            </div>
+            <div className="mt-3 flex items-center gap-2 text-[11px] text-neutral-500">
+              <HardDrive size={12} className="text-neutral-400" />
+              <span>Automated rolling SQLite snapshots active</span>
             </div>
           </section>
 

@@ -9,3 +9,7 @@ bun.lock
 *.cjs
 *.js
 uploads
+backups
+data
+*.sqlite*
+*.db

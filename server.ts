@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from "uuid";
 import { createServer as createViteServer } from "vite";
 import { WebSocketServer, WebSocket } from "ws";
 import { Client as SshClient } from "ssh2";
-import { getDb } from "./src/db.ts";
+import { getDb, createDatabaseSnapshot, listAvailableSnapshots } from "./src/db.ts";
 import { getActualDomain, getDomainBrand } from "./src/utils/domain.ts";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -468,9 +468,101 @@ app.put("/api/settings", requireAuth, async (req: any, res) => {
   if (updates.length > 0) {
     values.push(req.userId);
     await db.run(`UPDATE settings SET ${updates.join(', ')} WHERE user_id = ?`, values);
+    // Auto-create snapshot when shortcuts change
+    if (shortcuts_json !== undefined) {
+      createDatabaseSnapshot('auto');
+    }
   }
   
   res.json({ success: true });
+});
+
+// Full Dashboard Backup & Restore API
+app.get("/api/backup/export", requireAuth, async (req: any, res) => {
+  try {
+    const db = await getDb();
+    const user = await db.get("SELECT id, username FROM users WHERE id = ?", [req.userId]);
+    const settings = await db.get("SELECT * FROM settings WHERE user_id = ?", [req.userId]);
+    const backgrounds = await db.all("SELECT id, url, type, original_name, created_at FROM backgrounds WHERE user_id = ?", [req.userId]);
+    const sshProfiles = await db.all("SELECT id, name, host, port, username, auth_type, created_at FROM ssh_profiles WHERE user_id = ?", [req.userId]);
+    
+    const backupData = {
+      app: "Startarr",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      user: user?.username || 'user',
+      settings: settings || {},
+      backgrounds: backgrounds || [],
+      sshProfiles: sshProfiles || []
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="startarr-backup-${new Date().toISOString().slice(0, 10)}.json"`);
+    res.json(backupData);
+  } catch (err: any) {
+    console.error("Export Backup Error:", err);
+    res.status(500).json({ error: "Failed to export backup", details: err.message });
+  }
+});
+
+app.post("/api/backup/restore", requireAuth, async (req: any, res) => {
+  try {
+    const payload = req.body;
+    if (!payload || typeof payload !== 'object') {
+      return res.status(400).json({ error: "Invalid backup format" });
+    }
+
+    const db = await getDb();
+    // Create an automatic snapshot before restoring so user can revert
+    await createDatabaseSnapshot('pre-restore');
+
+    // Restore settings
+    const settings = payload.settings || (payload.shortcuts_json ? payload : null);
+    if (settings) {
+      const row = await db.get("SELECT user_id FROM settings WHERE user_id = ?", [req.userId]);
+      if (!row) {
+        await db.run("INSERT INTO settings (user_id) VALUES (?)", [req.userId]);
+      }
+      
+      const updates: string[] = [];
+      const values: any[] = [];
+      
+      if (settings.active_background !== undefined) { updates.push("active_background = ?"); values.push(settings.active_background); }
+      if (settings.tint_color !== undefined) { updates.push("tint_color = ?"); values.push(settings.tint_color); }
+      if (settings.tint_opacity !== undefined) { updates.push("tint_opacity = ?"); values.push(settings.tint_opacity); }
+      if (settings.ui_opacity !== undefined) { updates.push("ui_opacity = ?"); values.push(settings.ui_opacity); }
+      if (settings.ui_blur !== undefined) { updates.push("ui_blur = ?"); values.push(settings.ui_blur); }
+      if (settings.layout_size !== undefined) { updates.push("layout_size = ?"); values.push(settings.layout_size); }
+      if (settings.shortcuts_json !== undefined) { 
+        updates.push("shortcuts_json = ?"); 
+        values.push(typeof settings.shortcuts_json === 'string' ? settings.shortcuts_json : JSON.stringify(settings.shortcuts_json)); 
+      }
+      if (settings.show_recycle_bin !== undefined) { updates.push("show_recycle_bin = ?"); values.push(settings.show_recycle_bin ? 1 : 0); }
+      if (settings.recycle_bin_json !== undefined) { 
+        updates.push("recycle_bin_json = ?"); 
+        values.push(typeof settings.recycle_bin_json === 'string' ? settings.recycle_bin_json : JSON.stringify(settings.recycle_bin_json)); 
+      }
+
+      if (updates.length > 0) {
+        values.push(req.userId);
+        await db.run(`UPDATE settings SET ${updates.join(', ')} WHERE user_id = ?`, values);
+      }
+    }
+
+    res.json({ success: true, message: "Backup restored successfully" });
+  } catch (err: any) {
+    console.error("Restore Backup Error:", err);
+    res.status(500).json({ error: "Failed to restore backup", details: err.message });
+  }
+});
+
+app.get("/api/backup/snapshots", requireAuth, async (req: any, res) => {
+  try {
+    const list = listAvailableSnapshots();
+    res.json({ snapshots: list });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to list snapshots", details: err.message });
+  }
 });
 
 
