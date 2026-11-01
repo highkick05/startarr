@@ -13,8 +13,28 @@
     <meta property="og:description" content="A drag-and-drop customizable dashboard homepage for app shortcuts and scalable widgets including remote SSH terminals." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+    <style>
+      html, body {
+        background-color: #0b0f17;
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+    <script>
+      (function() {
+        try {
+          var bg = localStorage.getItem('activeBackground');
+          if (bg && bg !== 'none' && !bg.match(/\.(mp4|webm|ogg)$/i)) {
+            var s = document.createElement('style');
+            s.id = 'early-bg-style';
+            s.textContent = 'body { background-image: url("' + bg + '"); background-size: cover; background-position: center; background-repeat: no-repeat; }';
+            document.head.appendChild(s);
+          }
+        } catch(e) {}
+      })();
+    </script>
   </head>
-  <body>
+  <body class="bg-neutral-950 text-neutral-100 overflow-x-hidden">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -194,7 +194,65 @@ export const apiFetch = (url: string, options: RequestInit = {}) => {
 export default function App() {
   const { user, logout } = React.useContext(AuthContext);
   const [dataLoaded, setDataLoaded] = useState(false);
+
+  const [backgrounds, setBackgrounds] = useState<any[]>([]);
+  const [activeBackground, setActiveBackground] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('activeBackground');
+      if (saved && saved !== 'undefined' && saved !== 'null') {
+        return saved;
+      }
+    } catch (e) {}
+    return '';
+  });
   
+  const [tintColor, setTintColor] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('tintColor');
+      if (saved) return saved;
+    } catch (e) {}
+    return '#000000';
+  });
+
+  const [tintOpacity, setTintOpacity] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('tintOpacity');
+      if (saved !== null && saved !== undefined && saved !== '') return Number(saved);
+    } catch (e) {}
+    return 40;
+  });
+
+  const [uiOpacity, setUiOpacity] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('uiOpacity');
+      if (saved !== null && saved !== undefined && saved !== '') return Number(saved);
+    } catch (e) {}
+    return 50;
+  });
+
+  const [uiBlur, setUiBlur] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('uiBlur');
+      if (saved !== null && saved !== undefined && saved !== '') return Number(saved);
+    } catch (e) {}
+    return 16;
+  });
+
+  const changeBackground = (bgUrl: string) => {
+    setActiveBackground(bgUrl);
+    try {
+      localStorage.setItem('activeBackground', bgUrl);
+      const earlyStyle = document.getElementById('early-bg-style');
+      if (bgUrl && bgUrl !== 'none' && !bgUrl.match(/\.(mp4|webm|ogg)$/i)) {
+        if (earlyStyle) {
+          earlyStyle.textContent = `body { background-image: url("${bgUrl}"); background-size: cover; background-position: center; background-repeat: no-repeat; }`;
+        }
+      } else {
+        if (earlyStyle) earlyStyle.textContent = '';
+      }
+    } catch (e) {}
+  };
+
   useEffect(() => {
     Promise.all([
       apiFetch('/api/settings').then(res => res.ok ? res.json() : null).catch(() => null),
@@ -204,15 +262,33 @@ export default function App() {
         if (settings.layout_size) setLayoutSize(settings.layout_size);
         if (settings.active_background) {
           if (settings.active_background.includes('photo-1472214103451')) {
-            setActiveBackground('/default-background.jpg');
+            changeBackground('/default-background.jpg');
           } else {
-            setActiveBackground(settings.active_background);
+            changeBackground(settings.active_background);
           }
+        } else {
+          setActiveBackground(prev => {
+            if (prev) return prev;
+            changeBackground('/default-background.jpg');
+            return '/default-background.jpg';
+          });
         }
-        if (settings.tint_color) setTintColor(settings.tint_color);
-        if (settings.tint_opacity !== null && settings.tint_opacity !== undefined) setTintOpacity(settings.tint_opacity);
-        if (settings.ui_opacity !== null && settings.ui_opacity !== undefined) setUiOpacity(settings.ui_opacity);
-        if (settings.ui_blur !== null && settings.ui_blur !== undefined) setUiBlur(settings.ui_blur);
+        if (settings.tint_color) {
+          setTintColor(settings.tint_color);
+          try { localStorage.setItem('tintColor', settings.tint_color); } catch (e) {}
+        }
+        if (settings.tint_opacity !== null && settings.tint_opacity !== undefined) {
+          setTintOpacity(settings.tint_opacity);
+          try { localStorage.setItem('tintOpacity', String(settings.tint_opacity)); } catch (e) {}
+        }
+        if (settings.ui_opacity !== null && settings.ui_opacity !== undefined) {
+          setUiOpacity(settings.ui_opacity);
+          try { localStorage.setItem('uiOpacity', String(settings.ui_opacity)); } catch (e) {}
+        }
+        if (settings.ui_blur !== null && settings.ui_blur !== undefined) {
+          setUiBlur(settings.ui_blur);
+          try { localStorage.setItem('uiBlur', String(settings.ui_blur)); } catch (e) {}
+        }
         if (settings.show_recycle_bin !== undefined) setShowRecycleBin(!!settings.show_recycle_bin);
         if (settings.recycle_bin_json) {
            try {
@@ -683,13 +759,6 @@ export default function App() {
   const [isMouseNearBottom, setIsMouseNearBottom] = useState(false);
 
 
-  const [backgrounds, setBackgrounds] = useState<any[]>([]);
-  const [activeBackground, setActiveBackground] = useState('/default-background.jpg');
-  
-  const [tintColor, setTintColor] = useState('#000000');
-  const [tintOpacity, setTintOpacity] = useState(40);
-  const [uiOpacity, setUiOpacity] = useState(50);
-  const [uiBlur, setUiBlur] = useState(16);
   const [uploadingBg, setUploadingBg] = useState(false);
 
   useEffect(() => {
@@ -707,12 +776,17 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('activeBackground', activeBackground);
-    localStorage.setItem('tintColor', tintColor);
-    localStorage.setItem('tintOpacity', String(tintOpacity));
-    localStorage.setItem('uiOpacity', String(uiOpacity));
-    localStorage.setItem('uiBlur', String(uiBlur));
-    if (dataLoaded) {
+    if (!dataLoaded) return;
+    if (activeBackground) {
+      try { localStorage.setItem('activeBackground', activeBackground); } catch (e) {}
+    }
+    try {
+      localStorage.setItem('tintColor', tintColor);
+      localStorage.setItem('tintOpacity', String(tintOpacity));
+      localStorage.setItem('uiOpacity', String(uiOpacity));
+      localStorage.setItem('uiBlur', String(uiBlur));
+    } catch (e) {}
+    if (activeBackground) {
       saveSettingsToDb({
         active_background: activeBackground,
         tint_color: tintColor,
@@ -736,7 +810,7 @@ export default function App() {
       }
       const newBg = await res.json();
       setBackgrounds(prev => [...prev, newBg]);
-      setActiveBackground(newBg.url);
+      changeBackground(newBg.url);
     } catch (err) {
       // silently fail if intercepted
     } finally {
@@ -751,7 +825,7 @@ export default function App() {
       await fetch(`/api/backgrounds/${id}`, { method: 'DELETE' });
       setBackgrounds(prev => prev.filter(b => b.id !== id));
       if (activeBackground === url) {
-        setActiveBackground('none');
+        changeBackground('none');
       }
     } catch (err) {
       // silently fail if intercepted
@@ -2481,7 +2555,7 @@ export default function App() {
 
                 <div className="grid grid-cols-3 gap-2 mt-4">
                   <div 
-                    onClick={() => setActiveBackground('none')}
+                    onClick={() => changeBackground('none')}
                     className={`aspect-video rounded-lg cursor-pointer overflow-hidden relative border-2 flex items-center justify-center bg-neutral-950 ${activeBackground === 'none' ? 'border-emerald-500' : 'border-transparent hover:border-neutral-700'}`}
                   >
                      <span className="text-xs text-neutral-500 font-medium">None</span>
@@ -2489,7 +2563,7 @@ export default function App() {
                   {PRESET_BACKGROUNDS.map(preset => (
                     <div 
                       key={preset.id}
-                      onClick={() => setActiveBackground(preset.url)}
+                      onClick={() => changeBackground(preset.url)}
                       className={`aspect-video rounded-lg cursor-pointer overflow-hidden relative group border-2 ${activeBackground === preset.url ? 'border-emerald-500' : 'border-transparent hover:border-neutral-700'}`}
                       title={preset.name}
                     >
@@ -2503,7 +2577,7 @@ export default function App() {
                   {backgrounds.map(bg => (
                     <div 
                       key={bg.id}
-                      onClick={() => setActiveBackground(bg.url)}
+                      onClick={() => changeBackground(bg.url)}
                       className={`aspect-video rounded-lg cursor-pointer overflow-hidden relative group border-2 ${activeBackground === bg.url ? 'border-emerald-500' : 'border-transparent hover:border-neutral-700'}`}
                     >
                       {bg.type === 'video' ? (
