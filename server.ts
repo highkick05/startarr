@@ -12,15 +12,20 @@ import { getActualDomain, getDomainBrand } from "./src/utils/domain.ts";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
+import compression from "compression";
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "super_secret_jwt_key_12345";
 
+app.use(compression());
 app.use(express.json({ limit: '250mb' }));
 app.use(express.urlencoded({ limit: '250mb', extended: true }));
 app.use(cookieParser());
-app.use(express.static(path.join(process.cwd(), "public")));
+app.use(express.static(path.join(process.cwd(), "public"), {
+  maxAge: '1d',
+  etag: true,
+}));
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(UPLOADS_DIR)) {
@@ -356,7 +361,14 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 250 * 1024 * 1024 } });
 
-app.use("/uploads", express.static(UPLOADS_DIR));
+app.use("/uploads", express.static(UPLOADS_DIR, {
+  maxAge: '7d',
+  etag: true,
+  lastModified: true,
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+  }
+}));
 
 // Auth Middleware
 async function requireAuth(req: any, res: any, next: any) {
@@ -1306,8 +1318,19 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
+    // Serve hashed assets immutably with 1-year cache
+    app.use("/assets", express.static(path.join(distPath, "assets"), {
+      maxAge: '1y',
+      immutable: true,
+      etag: true,
+    }));
+    // Serve other static files
+    app.use(express.static(distPath, {
+      maxAge: '1h',
+      etag: true,
+    }));
     app.get("*", (req, res) => {
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.sendFile(path.join(distPath, "index.html"));
     });
   }

@@ -5,10 +5,10 @@ import 'gridstack/dist/gridstack.min.css';
 import { Plus, X, Link2, Loader2, LayoutGrid, Search, Globe, Settings, Trash2, Image as ImageIcon, Video as VideoIcon, Upload, Trash, LogOut, User, ArrowRight, Sparkles, Check, RefreshCw, Terminal as TerminalIcon, Sliders, Download, FileUp, AlertCircle, HardDrive } from 'lucide-react';
 import { ShortcutItem } from './types';
 import { AuthContext } from './Auth.tsx';
-import { popularApps } from './data';
 import { StartarrLogo } from './components/StartarrLogo';
 import { getActualDomain, getDomainBrand } from './utils/domain';
-import { TerminalWidget } from './components/TerminalWidget';
+
+const TerminalWidget = React.lazy(() => import('./components/TerminalWidget').then(m => ({ default: m.TerminalWidget })));
 
 type LayoutSize = 'small' | 'medium' | 'large';
 
@@ -254,139 +254,145 @@ export default function App() {
   };
 
   useEffect(() => {
-    Promise.all([
-      apiFetch('/api/settings').then(res => res.ok ? res.json() : null).catch(() => null),
-      apiFetch('/api/backgrounds').then(res => res.ok ? res.json() : []).catch(() => [])
-    ]).then(([settings, bgData]) => {
-      if (settings) {
-        if (settings.layout_size) setLayoutSize(settings.layout_size);
-        if (settings.active_background) {
-          if (settings.active_background.includes('photo-1472214103451')) {
-            changeBackground('/default-background.jpg');
-          } else {
-            changeBackground(settings.active_background);
-          }
-        } else {
-          setActiveBackground(prev => {
-            if (prev) return prev;
-            changeBackground('/default-background.jpg');
-            return '/default-background.jpg';
-          });
-        }
-        if (settings.tint_color) {
-          setTintColor(settings.tint_color);
-          try { localStorage.setItem('tintColor', settings.tint_color); } catch (e) {}
-        }
-        if (settings.tint_opacity !== null && settings.tint_opacity !== undefined) {
-          setTintOpacity(settings.tint_opacity);
-          try { localStorage.setItem('tintOpacity', String(settings.tint_opacity)); } catch (e) {}
-        }
-        if (settings.ui_opacity !== null && settings.ui_opacity !== undefined) {
-          setUiOpacity(settings.ui_opacity);
-          try { localStorage.setItem('uiOpacity', String(settings.ui_opacity)); } catch (e) {}
-        }
-        if (settings.ui_blur !== null && settings.ui_blur !== undefined) {
-          setUiBlur(settings.ui_blur);
-          try { localStorage.setItem('uiBlur', String(settings.ui_blur)); } catch (e) {}
-        }
-        if (settings.show_recycle_bin !== undefined) setShowRecycleBin(!!settings.show_recycle_bin);
-        if (settings.recycle_bin_json) {
-           try {
-             setRecycleBin(JSON.parse(settings.recycle_bin_json));
-           } catch(e) {}
-        }
-      }
-      if (settings && settings.shortcuts_json) {
-        try {
-          const parsed = JSON.parse(settings.shortcuts_json);
-          if (parsed && Array.isArray(parsed)) {
-            // Un-nest any containers or widgets that may have accidentally been dropped inside another container's children
-            const sanitized: any[] = [];
-            parsed.forEach((p: any) => {
-              if (!p) return;
-              if (p.type === 'container' && p.children && Array.isArray(p.children)) {
-                const validChildren: any[] = [];
-                p.children.forEach((c: any) => {
-                  if (c && (c.type === 'container' || c.type === 'widget' || c.widgetType === 'terminal' || c.type === 'category')) {
-                    sanitized.push(c); // Hoist accidental nested container back to top-level
-                  } else if (c) {
-                    validChildren.push(c);
-                  }
-                });
-                sanitized.push({ ...p, children: validChildren });
-              } else {
-                sanitized.push(p);
-              }
-            });
-
-            const sanitizedClean = sanitized.filter((p: any) => !!p).map((p: any) => ({
-              ...p,
-              w: p?.type === 'app' ? 1 : p?.w,
-              // If an app shortcut was previously automatically assigned a black unstyled logo or a junk wiki icon, heal it to authentic colored logo:
-              iconUrl: (p?.type === 'app' && (isMonochromeOrBlackIcon(p?.iconUrl) || isJunkWikiIcon(p?.iconUrl)))
-                ? (getFaviconUrl(p?.url) || p?.iconUrl)
-                : p?.iconUrl,
-              // Multiply h by 8 if it's the old 1x format. 
-              // We assume old apps have h:1. Old containers have h:2 or 3.
-              // New apps will have h:8.
-              h: (p.type === 'app' && (!p.h || p.h < 8)) ? 8 : (p.type === 'category' && (!p.h || p.h < 4) ? 4 : (p.type === 'container' && (!p.h || p.h < 8) ? (p.h ? p.h * 8 : 12) : ((p.type === 'widget' || p.widgetType === 'terminal') && (!p.h || p.h < 12) ? 24 : p.h)))
-            }));
-            try {
-              localStorage.setItem('shortcuts', JSON.stringify(sanitizedClean));
-            } catch (e) {}
-            setShortcuts(sanitizedClean);
-            // Also need to re-render grid since API loaded!
-
-            // Background upgrade: If any app shortcut is still using a low-quality gstatic favicon, globe, monochrome, or junk wiki icon,
-            // query scrape-metadata to heal it with verified high-res brand logos (Homarr, Selfh.st, Walkxcode, official brand vector)
-            const lowQualityApps = parsed.filter((p: any) => 
-              p?.type === 'app' && 
-              p?.url && 
-              p?.url.startsWith('http') &&
-              (!p.iconUrl || p.iconUrl.includes('gstatic.com/faviconV2') || p.iconUrl.includes('default-globe.svg') || isMonochromeOrBlackIcon(p.iconUrl) || isJunkWikiIcon(p.iconUrl))
-            );
-            if (lowQualityApps.length > 0) {
-              setTimeout(() => {
-                for (const item of lowQualityApps) {
-                  const brand = getDomainBrand(item.url);
-                  const titleClean = (item.title || '').split(/[-|–|—|:•·]/)[0].trim();
-                  updateShortcutDynamically(item.id, { isLoading: true });
-                  apiFetch('/api/scrape-metadata', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: item.url, query: brand || titleClean || '' })
-                  })
-                  .then(r => r.json())
-                  .then(data => {
-                    if (data && Array.isArray(data.icons) && data.icons.length > 0) {
-                      const best = pickBestColouredIcon(data.icons, item.url);
-                      if (best && getIconQualityScore(best) > getIconQualityScore(item.iconUrl || '')) {
-                        updateShortcutDynamically(item.id, { iconUrl: best, isLoading: false });
-                        return;
-                      }
-                    }
-                    updateShortcutDynamically(item.id, { isLoading: false });
-                  })
-                  .catch(() => {
-                    updateShortcutDynamically(item.id, { isLoading: false });
-                  })
-                  .finally(() => {
-                    updateShortcutDynamically(item.id, { isLoading: false });
-                  });
-                }
-              }, 500);
+    apiFetch('/api/settings')
+      .then(res => res.ok ? res.json() : null)
+      .then(settings => {
+        if (settings) {
+          if (settings.layout_size) setLayoutSize(settings.layout_size);
+          if (settings.active_background) {
+            if (settings.active_background.includes('photo-1472214103451')) {
+              changeBackground('/default-background.jpg');
+            } else {
+              changeBackground(settings.active_background);
             }
+          } else {
+            setActiveBackground(prev => {
+              if (prev) return prev;
+              changeBackground('/default-background.jpg');
+              return '/default-background.jpg';
+            });
           }
-        } catch (e) {}
-      }
-      if (bgData && Array.isArray(bgData)) setBackgrounds(bgData);
-      if (false) {
-        // Build hierarchy if needed, assuming the DB returns flat or hierarchical. 
-        // For simplicity, assuming backend stores flat and we just use the raw array if we stringified it.
-        // Oh wait, backend shortcuts are flat. But localStorage shortcuts had nested children.
-      }
-      setDataLoaded(true);
-    }).catch(console.error);
+          if (settings.tint_color) {
+            setTintColor(settings.tint_color);
+            try { localStorage.setItem('tintColor', settings.tint_color); } catch (e) {}
+          }
+          if (settings.tint_opacity !== null && settings.tint_opacity !== undefined) {
+            setTintOpacity(settings.tint_opacity);
+            try { localStorage.setItem('tintOpacity', String(settings.tint_opacity)); } catch (e) {}
+          }
+          if (settings.ui_opacity !== null && settings.ui_opacity !== undefined) {
+            setUiOpacity(settings.ui_opacity);
+            try { localStorage.setItem('uiOpacity', String(settings.ui_opacity)); } catch (e) {}
+          }
+          if (settings.ui_blur !== null && settings.ui_blur !== undefined) {
+            setUiBlur(settings.ui_blur);
+            try { localStorage.setItem('uiBlur', String(settings.ui_blur)); } catch (e) {}
+          }
+          if (settings.show_recycle_bin !== undefined) setShowRecycleBin(!!settings.show_recycle_bin);
+          if (settings.recycle_bin_json) {
+             try {
+               setRecycleBin(JSON.parse(settings.recycle_bin_json));
+             } catch(e) {}
+          }
+        }
+        if (settings && settings.shortcuts_json) {
+          try {
+            const parsed = JSON.parse(settings.shortcuts_json);
+            if (parsed && Array.isArray(parsed)) {
+              // Un-nest any containers or widgets that may have accidentally been dropped inside another container's children
+              const sanitized: any[] = [];
+              parsed.forEach((p: any) => {
+                if (!p) return;
+                if (p.type === 'container' && p.children && Array.isArray(p.children)) {
+                  const validChildren: any[] = [];
+                  p.children.forEach((c: any) => {
+                    if (c && (c.type === 'container' || c.type === 'widget' || c.widgetType === 'terminal' || c.type === 'category')) {
+                      sanitized.push(c); // Hoist accidental nested container back to top-level
+                    } else if (c) {
+                      validChildren.push(c);
+                    }
+                  });
+                  sanitized.push({ ...p, children: validChildren });
+                } else {
+                  sanitized.push(p);
+                }
+              });
+
+              const sanitizedClean = sanitized.filter((p: any) => !!p).map((p: any) => ({
+                ...p,
+                w: p?.type === 'app' ? 1 : p?.w,
+                iconUrl: (p?.type === 'app' && (isMonochromeOrBlackIcon(p?.iconUrl) || isJunkWikiIcon(p?.iconUrl)))
+                  ? (getFaviconUrl(p?.url) || p?.iconUrl)
+                  : p?.iconUrl,
+                h: (p.type === 'app' && (!p.h || p.h < 8)) ? 8 : (p.type === 'category' && (!p.h || p.h < 4) ? 4 : (p.type === 'container' && (!p.h || p.h < 8) ? (p.h ? p.h * 8 : 12) : ((p.type === 'widget' || p.widgetType === 'terminal') && (!p.h || p.h < 12) ? 24 : p.h)))
+              }));
+
+              const dbShortcutsStr = JSON.stringify(sanitizedClean);
+              const localShortcutsStr = localStorage.getItem('shortcuts');
+              if (dbShortcutsStr !== localShortcutsStr) {
+                try {
+                  localStorage.setItem('shortcuts', dbShortcutsStr);
+                } catch (e) {}
+                setShortcuts(sanitizedClean);
+              }
+
+              // Background upgrade: query scrape-metadata to heal low-quality icons, caching checks to avoid reload spam
+              const scrapedCache: Record<string, number> = (() => {
+                try { return JSON.parse(localStorage.getItem('scraped_urls_cache') || '{}'); } catch (e) { return {}; }
+              })();
+              const now = Date.now();
+              const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+
+              const lowQualityApps = parsed.filter((p: any) => 
+                p?.type === 'app' && 
+                p?.url && 
+                p?.url.startsWith('http') &&
+                (!p.iconUrl || p.iconUrl.includes('gstatic.com/faviconV2') || p.iconUrl.includes('default-globe.svg') || isMonochromeOrBlackIcon(p.iconUrl) || isJunkWikiIcon(p.iconUrl)) &&
+                (!scrapedCache[p.url] || (now - scrapedCache[p.url]) > SEVEN_DAYS)
+              );
+
+              if (lowQualityApps.length > 0) {
+                setTimeout(() => {
+                  for (const item of lowQualityApps) {
+                    scrapedCache[item.url] = Date.now();
+                    try { localStorage.setItem('scraped_urls_cache', JSON.stringify(scrapedCache)); } catch(e) {}
+                    const brand = getDomainBrand(item.url);
+                    const titleClean = (item.title || '').split(/[-|–|—|:•·]/)[0].trim();
+                    updateShortcutDynamically(item.id, { isLoading: true });
+                    apiFetch('/api/scrape-metadata', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ url: item.url, query: brand || titleClean || '' })
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                      if (data && Array.isArray(data.icons) && data.icons.length > 0) {
+                        const best = pickBestColouredIcon(data.icons, item.url);
+                        if (best && getIconQualityScore(best) > getIconQualityScore(item.iconUrl || '')) {
+                          updateShortcutDynamically(item.id, { iconUrl: best, isLoading: false });
+                          return;
+                        }
+                      }
+                      updateShortcutDynamically(item.id, { isLoading: false });
+                    })
+                    .catch(() => {
+                      updateShortcutDynamically(item.id, { isLoading: false });
+                    })
+                    .finally(() => {
+                      updateShortcutDynamically(item.id, { isLoading: false });
+                    });
+                  }
+                }, 1000);
+              }
+            }
+          } catch (e) {}
+        }
+        setDataLoaded(true);
+      })
+      .catch(err => {
+        console.error(err);
+        setDataLoaded(true);
+      });
   }, []);
 
   const gridContainerRef = useRef<HTMLDivElement>(null);
@@ -762,18 +768,20 @@ export default function App() {
   const [uploadingBg, setUploadingBg] = useState(false);
 
   useEffect(() => {
-    apiFetch('/api/backgrounds')
-      .then(res => {
-        if (res.headers.get('content-type')?.includes('application/json')) {
-          return res.json();
-        }
-        return [];
-      })
-      .then(data => { 
-        if (Array.isArray(data)) setBackgrounds(data);
-      })
-      .catch(() => {});
-  }, []);
+    if (isSettingsOpen && backgrounds.length === 0) {
+      apiFetch('/api/backgrounds')
+        .then(res => {
+          if (res.headers.get('content-type')?.includes('application/json')) {
+            return res.json();
+          }
+          return [];
+        })
+        .then(data => { 
+          if (Array.isArray(data)) setBackgrounds(data);
+        })
+        .catch(() => {});
+    }
+  }, [isSettingsOpen, backgrounds.length]);
 
   useEffect(() => {
     if (!dataLoaded) return;
@@ -843,12 +851,24 @@ export default function App() {
 
   
 
+  const [appsCatalog, setAppsCatalog] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (isInputFocused || searchQuery.trim().length > 0) {
+      if (appsCatalog.length === 0) {
+        import('./data').then(m => {
+          if (m && m.popularApps) setAppsCatalog(m.popularApps);
+        }).catch(() => {});
+      }
+    }
+  }, [isInputFocused, searchQuery, appsCatalog.length]);
+
   const filteredApps = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    return popularApps
-      .filter(app => app.title.toLowerCase().includes(searchQuery.toLowerCase()) || app.url.toLowerCase().includes(searchQuery.toLowerCase()))
+    if (!searchQuery.trim() || appsCatalog.length === 0) return [];
+    return appsCatalog
+      .filter(app => (app.title || '').toLowerCase().includes(searchQuery.toLowerCase()) || (app.url || '').toLowerCase().includes(searchQuery.toLowerCase()))
       .slice(0, 8);
-  }, [searchQuery]);
+  }, [searchQuery, appsCatalog]);
 
   useEffect(() => {
     if (!searchQuery.trim() || filteredApps.length > 0) {
@@ -1035,7 +1055,7 @@ export default function App() {
 
   // Initialize GridStack
   useEffect(() => {
-    if (!gridContainerRef.current || !dataLoaded) return;
+    if (!gridContainerRef.current) return;
     isInitializing.current = true;
     
     currentCols.current = getColumns(layoutSize);
@@ -1083,7 +1103,7 @@ export default function App() {
     shortcuts.forEach(item => addWidgetToGrid(item));
 
     isInitializing.current = false;
-    allowSave.current = true;
+    allowSave.current = dataLoaded;
 
     // Now listen to events
     
@@ -1294,12 +1314,32 @@ export default function App() {
         gridInstance.current.destroy(false);
       }
     };
-  }, [layoutSize, dataLoaded, showRecycleBin]); // Re-init grid when layoutSize changes, data finishes loading, or recycle bin toggles
+  }, [layoutSize, showRecycleBin]); // Re-init grid when layoutSize changes or recycle bin toggles
+
+  useEffect(() => {
+    if (dataLoaded) {
+      allowSave.current = true;
+    }
+  }, [dataLoaded]);
+
+  const prevShortcutsRef = useRef<string>(JSON.stringify(shortcuts));
+  useEffect(() => {
+    const currentStr = JSON.stringify(shortcuts);
+    if (prevShortcutsRef.current !== currentStr) {
+      prevShortcutsRef.current = currentStr;
+      if (gridInstance.current && !isInitializing.current) {
+        gridInstance.current.removeAll();
+        terminalMountsRef.current.clear();
+        setTerminalMounts(new Map());
+        shortcuts.forEach(item => addWidgetToGrid(item));
+      }
+    }
+  }, [shortcuts]);
 
   const saveGridState = () => {
     saveGridStateRef.current = saveGridState;
 
-    if (!gridInstance.current || isInitializing.current) return;
+    if (!gridInstance.current || isInitializing.current || !allowSave.current) return;
     const extractNodes = (grid: any): any[] => {
       if (!grid || !grid.engine || !grid.engine.nodes) return [];
       return grid.engine.nodes.map((node: any) => {
@@ -3328,17 +3368,19 @@ export default function App() {
       {Array.from(terminalMounts.entries()).map(([id, { el, item }]) => {
         const currentItem = itemRegistry.current.get(id) || shortcuts.find(s => s.id === id) || item;
         return createPortal(
-          <TerminalWidget
-            key={id}
-            item={currentItem}
-            layoutSize={layoutSize}
-            onUpdateConfig={(cfg) => updateWidgetConfig(id, cfg)}
-            onRemove={() => {
-              if ((window as any).removeShortcut) {
-                (window as any).removeShortcut(id);
-              }
-            }}
-          />,
+          <React.Suspense fallback={<div className="w-full h-full bg-neutral-900/60 rounded-xl flex items-center justify-center text-xs text-neutral-500">Loading Terminal...</div>}>
+            <TerminalWidget
+              key={id}
+              item={currentItem}
+              layoutSize={layoutSize}
+              onUpdateConfig={(cfg) => updateWidgetConfig(id, cfg)}
+              onRemove={() => {
+                if ((window as any).removeShortcut) {
+                  (window as any).removeShortcut(id);
+                }
+              }}
+            />
+          </React.Suspense>,
           el
         );
       })}
